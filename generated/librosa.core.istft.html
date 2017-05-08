@@ -8,9 +8,11 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>librosa.core.istft &mdash; librosa 0.5.0 documentation</title>
+  <title>librosa.core.istft &mdash; librosa 0.5.1 documentation</title>
   
 
+  
+  
   
   
 
@@ -35,7 +37,7 @@
         <link rel="index" title="Index"
               href="../genindex.html"/>
         <link rel="search" title="Search" href="../search.html"/>
-    <link rel="top" title="librosa 0.5.0 documentation" href="../index.html"/>
+    <link rel="top" title="librosa 0.5.1 documentation" href="../index.html"/>
         <link rel="up" title="Core IO and DSP" href="../core.html"/>
         <link rel="next" title="librosa.core.ifgram" href="librosa.core.ifgram.html"/>
         <link rel="prev" title="librosa.core.stft" href="librosa.core.stft.html"/> 
@@ -47,6 +49,7 @@
 
 <body class="wy-body-for-nav" role="document">
 
+   
   <div class="wy-grid-for-nav">
 
     
@@ -87,7 +90,10 @@
           
             
             
-                <ul>
+              
+            
+            
+              <ul>
 <li class="toctree-l1"><a class="reference internal" href="../install.html">Installation instructions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Tutorial</a></li>
 </ul>
@@ -145,8 +151,10 @@
 
       
       <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
-        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-        <a href="../index.html">librosa</a>
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">librosa</a>
+        
       </nav>
 
 
@@ -155,41 +163,52 @@
         <div class="rst-content">
           
 
- 
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 <div role="navigation" aria-label="breadcrumbs navigation">
+
   <ul class="wy-breadcrumbs">
-    <li><a href="../index.html">Docs</a> &raquo;</li>
-      
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
           <li><a href="../core.html">Core IO and DSP</a> &raquo;</li>
-      
-    <li>librosa.core.istft</li>
+        
+      <li>librosa.core.istft</li>
+    
+    
       <li class="wy-breadcrumbs-aside">
         
-          
+            
             <a href="../_sources/generated/librosa.core.istft.rst.txt" rel="nofollow"> View page source</a>
           
         
       </li>
+    
   </ul>
+
+  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  
-
-
-
-
-
-<div class="section" id="librosa-core-istft">
+  <div class="section" id="librosa-core-istft">
 <h1>librosa.core.istft<a class="headerlink" href="#librosa-core-istft" title="Permalink to this headline">¶</a></h1>
 <dl class="function">
 <dt id="librosa.core.istft">
-<code class="descclassname">librosa.core.</code><code class="descname">istft</code><span class="sig-paren">(</span><em>stft_matrix</em>, <em>hop_length=None</em>, <em>win_length=None</em>, <em>window='hann'</em>, <em>center=True</em>, <em>dtype=&lt;class 'numpy.float32'&gt;</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/librosa/core/spectrum.html#istft"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#librosa.core.istft" title="Permalink to this definition">¶</a></dt>
+<code class="descclassname">librosa.core.</code><code class="descname">istft</code><span class="sig-paren">(</span><em>stft_matrix</em>, <em>hop_length=None</em>, <em>win_length=None</em>, <em>window='hann'</em>, <em>center=True</em>, <em>dtype=&lt;class 'numpy.float32'&gt;</em>, <em>length=None</em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/librosa/core/spectrum.html#istft"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#librosa.core.istft" title="Permalink to this definition">¶</a></dt>
 <dd><p>Inverse short-time Fourier transform (ISTFT).</p>
 <p>Converts a complex-valued spectrogram <em class="xref py py-obj">stft_matrix</em> to time-series <em class="xref py py-obj">y</em>
 by minimizing the mean squared error between <em class="xref py py-obj">stft_matrix</em> and STFT of
@@ -229,8 +248,8 @@ according to the <em class="xref py py-obj">window</em> function (see below).</p
 <blockquote>
 <div><ul class="simple">
 <li>a window specification (string, tuple, or number);
-see <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.get_window.html#scipy.signal.get_window" title="(in SciPy v0.18.1)"><code class="xref py py-obj docutils literal"><span class="pre">scipy.signal.get_window</span></code></a></li>
-<li>a window function, such as <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.hanning.html#scipy.signal.hanning" title="(in SciPy v0.18.1)"><code class="xref py py-obj docutils literal"><span class="pre">scipy.signal.hanning</span></code></a></li>
+see <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.get_window.html#scipy.signal.get_window" title="(in SciPy v0.19.0)"><code class="xref py py-obj docutils literal"><span class="pre">scipy.signal.get_window</span></code></a></li>
+<li>a window function, such as <a class="reference external" href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.hanning.html#scipy.signal.hanning" title="(in SciPy v0.19.0)"><code class="xref py py-obj docutils literal"><span class="pre">scipy.signal.hanning</span></code></a></li>
 <li>a user-specified window vector of length <em class="xref py py-obj">n_fft</em></li>
 </ul>
 </div></blockquote>
@@ -244,6 +263,11 @@ see <a class="reference external" href="https://docs.scipy.org/doc/scipy/referen
 <p><strong>dtype</strong> : numeric type</p>
 <blockquote>
 <div><p>Real numeric type for <em class="xref py py-obj">y</em>.  Default is 32-bit float.</p>
+</div></blockquote>
+<p><strong>length</strong> : int &gt; 0, optional</p>
+<blockquote>
+<div><p>If provided, the output <em class="xref py py-obj">y</em> is zero-padded or clipped to exactly
+<em class="xref py py-obj">length</em> samples.</p>
 </div></blockquote>
 </td>
 </tr>
@@ -278,7 +302,7 @@ Otherwise, a partial frame at the end of <em class="xref py py-obj">y</em> will 
 <span class="gp">&gt;&gt;&gt; </span><span class="n">n_fft</span> <span class="o">=</span> <span class="mi">2048</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">y_pad</span> <span class="o">=</span> <span class="n">librosa</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">fix_length</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">n</span> <span class="o">+</span> <span class="n">n_fft</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">D</span> <span class="o">=</span> <span class="n">librosa</span><span class="o">.</span><span class="n">stft</span><span class="p">(</span><span class="n">y_pad</span><span class="p">,</span> <span class="n">n_fft</span><span class="o">=</span><span class="n">n_fft</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">y_out</span> <span class="o">=</span> <span class="n">librosa</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">fix_length</span><span class="p">(</span><span class="n">librosa</span><span class="o">.</span><span class="n">istft</span><span class="p">(</span><span class="n">D</span><span class="p">),</span> <span class="n">n</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">y_out</span> <span class="o">=</span> <span class="n">librosa</span><span class="o">.</span><span class="n">istft</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">length</span><span class="o">=</span><span class="n">n</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">y</span> <span class="o">-</span> <span class="n">y_out</span><span class="p">))</span>
 <span class="go">1.4901161e-07</span>
 </pre></div>
@@ -289,15 +313,18 @@ Otherwise, a partial frame at the end of <em class="xref py py-obj">y</em> will 
 
 
            </div>
+           <div class="articleComments">
+            
+           </div>
           </div>
           <footer>
   
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
-        <a href="librosa.core.ifgram.html" class="btn btn-neutral float-right" title="librosa.core.ifgram" accesskey="n">Next <span class="fa fa-arrow-circle-right"></span></a>
+        <a href="librosa.core.ifgram.html" class="btn btn-neutral float-right" title="librosa.core.ifgram" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
       
       
-        <a href="librosa.core.stft.html" class="btn btn-neutral" title="librosa.core.stft" accesskey="p"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+        <a href="librosa.core.stft.html" class="btn btn-neutral" title="librosa.core.stft" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
       
     </div>
   
@@ -324,21 +351,24 @@ Otherwise, a partial frame at the end of <em class="xref py py-obj">y</em> will 
 <div class="rst-versions" data-toggle="rst-versions" role="note" aria-label="versions">
     <span class="rst-current-version" data-toggle="rst-current-version">
         <span class="fa fa-book"> Other Versions</span>
-        v: 0.5.0
+        v: master
         <span class="fa fa-caret-down"></span>
     </span>
     <div class="rst-other-versions">
         <dl>
             <dt>Tags</dt>
-            <dd><a href="../0.4.0rc1/generated/librosa.core.istft.html">0.4.0rc1</a></dd>
+            <dd><a href="../0.4.0rc1/index.html">0.4.0rc1</a></dd>
             <dd><a href="../0.4.2/generated/librosa.core.istft.html">0.4.2</a></dd>
             <dd><a href="../0.4.3/generated/librosa.core.istft.html">0.4.3</a></dd>
             <dd><a href="../0.4.3rc0/generated/librosa.core.istft.html">0.4.3rc0</a></dd>
             <dd><a href="../0.5.0/generated/librosa.core.istft.html">0.5.0</a></dd>
             <dd><a href="../0.5.0rc0/generated/librosa.core.istft.html">0.5.0rc0</a></dd>
+            <dd><a href="../0.5.1/generated/librosa.core.istft.html">0.5.1</a></dd>
+            <dd><a href="../v0.1.0/index.html">v0.1.0</a></dd>
         </dl>
         <dl>
             <dt>Branches</dt>
+            <dd><a href="../icqt/generated/librosa.core.istft.html">icqt</a></dd>
             <dd><a href="../master/generated/librosa.core.istft.html">master</a></dd>
         </dl>
     </div>
@@ -350,10 +380,11 @@ Otherwise, a partial frame at the end of <em class="xref py py-obj">y</em> will 
     <script type="text/javascript">
         var DOCUMENTATION_OPTIONS = {
             URL_ROOT:'../',
-            VERSION:'0.5.0',
+            VERSION:'0.5.1',
             COLLAPSE_INDEX:false,
             FILE_SUFFIX:'.html',
-            HAS_SOURCE:  true
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
         };
     </script>
       <script type="text/javascript" src="../_static/jquery.js"></script>
