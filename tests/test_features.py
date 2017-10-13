@@ -259,7 +259,6 @@ def test_spectral_bandwidth_errors():
     yield __test, S
 
 
-
 def test_spectral_rolloff_synthetic():
 
     srand()
@@ -408,17 +407,6 @@ def test_rmse():
 
     for n in range(10, 100, 10):
         yield __test, n
-
-
-def test_rmse_nfft():
-
-    warnings.resetwarnings()
-    warnings.simplefilter('always')
-    with warnings.catch_warnings(record=True) as out:
-        librosa.feature.rmse(y=np.zeros(8192), n_fft=1024)
-        assert len(out) > 0
-        assert out[0].category is DeprecationWarning
-        assert 'renamed' in str(out[0].message).lower()
 
 
 def test_zcr_synthetic():
@@ -656,6 +644,44 @@ def test_tempogram_odf():
             for window in ['hann', np.ones, np.ones(win_length)]:
                 for norm in [None, 1, 2, np.inf]:
                     yield __test_peaks, tempo, win_length, window, norm
+
+
+def test_tempogram_odf_multi():
+
+    sr = 22050
+    hop_length = 512
+    duration = 8
+
+    # Generate a synthetic onset envelope
+    def __test(center, win_length, window, norm):
+        # Generate an evenly-spaced pulse train
+        odf = np.zeros((10, duration * sr // hop_length))
+        for i in range(10):
+            spacing = sr * 60. // (hop_length * (60 + 12 * i))
+            odf[i, ::int(spacing)] = 1
+
+        tempogram = librosa.feature.tempogram(onset_envelope=odf,
+                                              sr=sr,
+                                              hop_length=hop_length,
+                                              win_length=win_length,
+                                              window=window,
+                                              norm=norm)
+
+        for i in range(10):
+            tg_local = librosa.feature.tempogram(onset_envelope=odf[i],
+                                                 sr=sr,
+                                                 hop_length=hop_length,
+                                                 win_length=win_length,
+                                                 window=window,
+                                                 norm=norm)
+
+            assert np.allclose(tempogram[i], tg_local)
+
+    for center in [False, True]:
+        for win_length in [192, 384]:
+            for window in ['hann', np.ones, np.ones(win_length)]:
+                for norm in [None, 1, 2, np.inf]:
+                    yield __test, center, win_length, window, norm
 
 
 def test_cens():

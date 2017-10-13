@@ -58,10 +58,12 @@ def frame(y, frame_length=2048, hop_length=512):
     Raises
     ------
     ParameterError
-        If `y` is not contiguous in memory, framing is invalid.
-        See `np.ascontiguous()` for details.
+        If `y` is not contiguous in memory, not an `np.ndarray`, or
+        not one-dimensional.  See `np.ascontiguous()` for details.
 
         If `hop_length < 1`, frames cannot advance.
+
+        If `len(y) < frame_length`.
 
     Examples
     --------
@@ -77,6 +79,14 @@ def frame(y, frame_length=2048, hop_length=512):
 
     '''
 
+    if not isinstance(y, np.ndarray):
+        raise ParameterError('Input must be of type numpy.ndarray, '
+                             'given type(y)={}'.format(type(y)))
+
+    if y.ndim != 1:
+        raise ParameterError('Input must be one-dimensional, '
+                             'given y.ndim={}'.format(y.ndim))
+
     if len(y) < frame_length:
         raise ParameterError('Buffer is too short (n={:d})'
                              ' for frame_length={:d}'.format(len(y), frame_length))
@@ -86,8 +96,6 @@ def frame(y, frame_length=2048, hop_length=512):
 
     if not y.flags['C_CONTIGUOUS']:
         raise ParameterError('Input buffer must be contiguous.')
-
-    valid_audio(y)
 
     # Compute the number of frames that will fit. The end may get truncated.
     n_frames = 1 + int((len(y) - frame_length) / hop_length)
@@ -743,23 +751,24 @@ def normalize(S, norm=np.inf, axis=0, threshold=None, fill=None):
     # indices where norm is below the threshold
     small_idx = length < threshold
 
+    Snorm = np.empty_like(S)
     if fill is None:
         # Leave small indices un-normalized
         length[small_idx] = 1.0
-        Snorm = S / length
+        Snorm[:] = S / length
 
     elif fill:
         # If we have a non-zero fill value, we locate those entries by
         # doing a nan-divide.
         # If S was finite, then length is finite (except for small positions)
         length[small_idx] = np.nan
-        Snorm = S / length
+        Snorm[:] = S / length
         Snorm[np.isnan(Snorm)] = fill_norm
     else:
         # Set small values to zero by doing an inf-divide.
         # This is safe (by IEEE-754) as long as S is finite.
         length[small_idx] = np.inf
-        Snorm = S / length
+        Snorm[:] = S / length
 
     return Snorm
 

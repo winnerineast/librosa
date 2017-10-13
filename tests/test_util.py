@@ -46,6 +46,26 @@ def test_frame():
             yield (__test, [frame, hop_length])
 
 
+def test_frame_fail():
+
+    __test = raises(librosa.ParameterError)(librosa.util.frame)
+
+    # First fail, not an ndarray
+    yield __test, list(range(10)), 5, 1
+
+    # Second fail: wrong ndims
+    yield __test, np.zeros((10, 10)), 5, 1
+
+    # Third fail: too short
+    yield __test, np.zeros(10), 20, 1
+
+    # Fourth fail: bad hop length
+    yield __test, np.zeros(10), 20, -1
+
+    # Fifth fail: discontiguous input
+    yield __test, np.zeros(20)[::2], 10, 1
+
+
 def test_pad_center():
 
     def __test(y, n, axis, mode):
@@ -142,6 +162,10 @@ def test_normalize():
     def __test_pass(X, norm, axis):
         X_norm = librosa.util.normalize(X, norm=norm, axis=axis)
 
+        # Shape and dtype checks
+        assert X_norm.dtype == X.dtype
+        assert X_norm.shape == X.shape
+
         if norm is None:
             assert np.allclose(X, X_norm)
             return
@@ -205,7 +229,8 @@ def test_normalize_threshold():
 def test_normalize_fill():
 
     def __test(fill, norm, threshold, axis, x, result):
-        xn = librosa.util.normalize(x, axis=axis,
+        xn = librosa.util.normalize(x,
+                                    axis=axis,
                                     fill=fill,
                                     threshold=threshold,
                                     norm=norm)
@@ -254,7 +279,8 @@ def test_normalize_fill():
     axis = None
     threshold = None
     norm = 2
-    yield __test, None, norm, threshold, axis, np.asarray([[3, 0], [0, 4]]), np.asarray([[0.6, 0], [0, 0.8]])
+    yield __test, None, norm, threshold, axis, np.asarray([[3, 0], [0, 4]]), np.asarray([[0, 0], [0, 0]])
+    yield __test, None, norm, threshold, axis, np.asarray([[3., 0], [0, 4]]), np.asarray([[0.6, 0], [0, 0.8]])
 
 
 def test_axis_sort():
