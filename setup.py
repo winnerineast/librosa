@@ -4,6 +4,9 @@ import imp
 
 version = imp.load_source('librosa.version', 'librosa/version.py')
 
+with open('README.md', 'r') as fdesc:
+    long_description = fdesc.read()
+
 setup(
     name='librosa',
     version=version.version,
@@ -14,7 +17,8 @@ setup(
     download_url='http://github.com/librosa/librosa/releases',
     packages=find_packages(),
     package_data={'': ['example_data/*']},
-    long_description="""A python module for audio and music processing.""",
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     classifiers=[
         "License :: OSI Approved :: ISC License (ISCL)",
         "Programming Language :: Python",
@@ -33,18 +37,20 @@ setup(
     install_requires=[
         'audioread >= 2.0.0',
         'numpy >= 1.8.0',
-        'scipy >= 0.13.0',
+        'scipy >= 0.14.0',
         'scikit-learn >= 0.14.0, != 0.19.0',
-        'joblib >= 0.7.0',
+        'joblib >= 0.12',
         'decorator >= 3.0.0',
         'six >= 1.3',
-        'resampy >= 0.2.0'
+        'resampy >= 0.2.0',
+        'numba >= 0.38.0',
     ],
     extras_require={
         'docs': ['numpydoc', 'sphinx!=1.3.1', 'sphinx_rtd_theme',
                  'matplotlib >= 2.0.0',
-                 'sphinxcontrib-versioning >= 2.2.1'],
-        'tests': ['matplotlib >= 2.0.0'],
+                 'sphinxcontrib-versioning >= 2.2.1',
+                 'sphinx-gallery'],
+        'tests': ['matplotlib >= 2.1'],
         'display': ['matplotlib >= 1.5'],
     }
 )

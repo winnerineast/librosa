@@ -20,10 +20,10 @@ __all__ = ['MAX_MEM_BLOCK',
            'valid_audio', 'valid_int', 'valid_intervals',
            'fix_frames',
            'axis_sort', 'localmax', 'normalize',
-           'match_intervals', 'match_events',
            'peak_pick',
            'sparsify_rows',
            'roll_sparse',
+           'fill_off_diagonal',
            'index_to_slice',
            'sync',
            'softmask',
@@ -155,7 +155,7 @@ def valid_audio(y, mono=True):
     if not isinstance(y, np.ndarray):
         raise ParameterError('data must be of type numpy.ndarray')
 
-    if not np.issubdtype(y.dtype, np.float):
+    if not np.issubdtype(y.dtype, np.floating):
         raise ParameterError('data must be floating-point')
 
     if mono and y.ndim != 1:
@@ -211,6 +211,7 @@ def valid_intervals(intervals):
 
         - intervals.ndim == 2
         - intervals.shape[1] == 2
+        - intervals[i, 0] <= intervals[i, 1] for all i
 
     Parameters
     ----------
@@ -225,6 +226,9 @@ def valid_intervals(intervals):
 
     if intervals.ndim != 2 or intervals.shape[-1] != 2:
         raise ParameterError('intervals must have shape (n, 2)')
+
+    if np.any(intervals[:, 0] > intervals[:, 1]):
+        raise ParameterError('intervals={} must have non-negative durations'.format(intervals))
 
     return True
 
@@ -353,7 +357,7 @@ def fix_length(data, size, axis=-1, **kwargs):
     if n > size:
         slices = [slice(None)] * data.ndim
         slices[axis] = slice(0, size)
-        return data[slices]
+        return data[tuple(slices)]
 
     elif n < size:
         lengths = [(0, 0)] * data.ndim
@@ -540,9 +544,9 @@ def axis_sort(S, axis=-1, index=False, value=None):
     sort_slice[axis] = idx
 
     if index:
-        return S[sort_slice], idx
+        return S[tuple(sort_slice)], idx
     else:
-        return S[sort_slice]
+        return S[tuple(sort_slice)]
 
 
 @cache(level=40)
@@ -773,189 +777,6 @@ def normalize(S, norm=np.inf, axis=0, threshold=None, fill=None):
     return Snorm
 
 
-def match_intervals(intervals_from, intervals_to):
-    '''Match one set of time intervals to another.
-
-    This can be useful for tasks such as mapping beat timings
-    to segments.
-
-    .. note:: A target interval may be matched to multiple source
-      intervals.
-
-    Parameters
-    ----------
-    intervals_from : np.ndarray [shape=(n, 2)]
-        The time range for source intervals.
-        The `i` th interval spans time `intervals_from[i, 0]`
-        to `intervals_from[i, 1]`.
-        `intervals_from[0, 0]` should be 0, `intervals_from[-1, 1]`
-        should be the track duration.
-
-    intervals_to : np.ndarray [shape=(m, 2)]
-        Analogous to `intervals_from`.
-
-    Returns
-    -------
-    interval_mapping : np.ndarray [shape=(n,)]
-        For each interval in `intervals_from`, the
-        corresponding interval in `intervals_to`.
-
-    See Also
-    --------
-    match_events
-
-    Raises
-    ------
-    ParameterError
-        If either array of input intervals is not the correct shape
-    '''
-
-    if len(intervals_from) == 0 or len(intervals_to) == 0:
-        raise ParameterError('Attempting to match empty interval list')
-
-    # Verify that the input intervals has correct shape and size
-    valid_intervals(intervals_from)
-    valid_intervals(intervals_to)
-
-    # The overlap score of a beat with a segment is defined as
-    #   max(0, min(beat_end, segment_end) - max(beat_start, segment_start))
-    output = np.empty(len(intervals_from), dtype=np.int)
-
-    n_rows = int(MAX_MEM_BLOCK / (len(intervals_to) * intervals_to.itemsize))
-    n_rows = max(1, n_rows)
-
-    for bl_s in range(0, len(intervals_from), n_rows):
-        bl_t = min(bl_s + n_rows, len(intervals_from))
-        tmp_from = intervals_from[bl_s:bl_t]
-
-        starts = np.maximum.outer(tmp_from[:, 0], intervals_to[:, 0])
-        ends = np.minimum.outer(tmp_from[:, 1], intervals_to[:, 1])
-        score = np.maximum(0, ends - starts)
-
-        output[bl_s:bl_t] = np.argmax(score, axis=-1)
-
-    return output
-
-
-def match_events(events_from, events_to, left=True, right=True):
-    '''Match one set of events to another.
-
-    This is useful for tasks such as matching beats to the nearest
-    detected onsets, or frame-aligned events to the nearest zero-crossing.
-
-    .. note:: A target event may be matched to multiple source events.
-
-    Examples
-    --------
-    >>> # Sources are multiples of 7
-    >>> s_from = np.arange(0, 100, 7)
-    >>> s_from
-    array([ 0,  7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91,
-           98])
-    >>> # Targets are multiples of 10
-    >>> s_to = np.arange(0, 100, 10)
-    >>> s_to
-    array([ 0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
-    >>> # Find the matching
-    >>> idx = librosa.util.match_events(s_from, s_to)
-    >>> idx
-    array([0, 1, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8, 9, 9])
-    >>> # Print each source value to its matching target
-    >>> zip(s_from, s_to[idx])
-    [(0, 0), (7, 10), (14, 10), (21, 20), (28, 30), (35, 30),
-     (42, 40), (49, 50), (56, 60), (63, 60), (70, 70), (77, 80),
-     (84, 80), (91, 90), (98, 90)]
-
-    Parameters
-    ----------
-    events_from : ndarray [shape=(n,)]
-      Array of events (eg, times, sample or frame indices) to match from.
-
-    events_to : ndarray [shape=(m,)]
-      Array of events (eg, times, sample or frame indices) to
-      match against.
-
-    left : bool
-    right : bool
-        If `False`, then matched events cannot be to the left (or right)
-        of source events.
-
-    Returns
-    -------
-    event_mapping : np.ndarray [shape=(n,)]
-        For each event in `events_from`, the corresponding event
-        index in `events_to`.
-
-        `event_mapping[i] == arg min |events_from[i] - events_to[:]|`
-
-    See Also
-    --------
-    match_intervals
-
-    Raises
-    ------
-    ParameterError
-        If either array of input events is not the correct shape
-    '''
-
-    if len(events_from) == 0 or len(events_to) == 0:
-        raise ParameterError('Attempting to match empty event list')
-
-    # If we can't match left or right, then only strict equivalence
-    # counts as a match.
-    if not (left or right) and not np.all(np.in1d(events_from, events_to)):
-            raise ParameterError('Cannot match events with left=right=False '
-                                 'and events_from is not contained '
-                                 'in events_to')
-
-    # If we can't match to the left, then there should be at least one
-    # target event greater-equal to every source event
-    if (not left) and max(events_to) < max(events_from):
-        raise ParameterError('Cannot match events with left=False '
-                             'and max(events_to) < max(events_from)')
-
-    # If we can't match to the right, then there should be at least one
-    # target event less-equal to every source event
-    if (not right) and min(events_to) > min(events_from):
-        raise ParameterError('Cannot match events with right=False '
-                             'and min(events_to) > min(events_from)')
-
-    # Pre-allocate the output array
-    output = np.empty_like(events_from, dtype=np.int)
-
-    # Compute how many rows we can process at once within the memory block
-    n_rows = int(MAX_MEM_BLOCK / (np.prod(output.shape[1:]) * len(events_to)
-                                  * events_from.itemsize))
-
-    # Make sure we can at least make some progress
-    n_rows = max(1, n_rows)
-
-    # Iterate over blocks of the data
-    for bl_s in range(0, len(events_from), n_rows):
-        bl_t = min(bl_s + n_rows, len(events_from))
-
-        event_block = events_from[bl_s:bl_t]
-
-        # distance[i, j] = |events_from - events_to[j]|
-        distance = np.abs(np.subtract.outer(event_block,
-                                            events_to)).astype(np.float)
-
-        # If we can't match to the right, squash all comparisons where
-        # events_to[j] > events_from[i]
-        if not right:
-            distance[np.less.outer(event_block, events_to)] = np.nan
-
-        # If we can't match to the left, squash all comparisons where
-        # events_to[j] < events_from[i]
-        if not left:
-            distance[np.greater.outer(event_block, events_to)] = np.nan
-
-        # Find the minimum distance point from whatever's left after squashing
-        output[bl_s:bl_t] = np.nanargmin(distance, axis=-1)
-
-    return output
-
-
 def localmax(x, axis=0):
     """Find local maxima in an array `x`.
 
@@ -1002,7 +823,7 @@ def localmax(x, axis=0):
     inds2 = [slice(None)] * x.ndim
     inds2[axis] = slice(2, x_pad.shape[axis])
 
-    return (x > x_pad[inds1]) & (x >= x_pad[inds2])
+    return (x > x_pad[tuple(inds1)]) & (x >= x_pad[tuple(inds2)])
 
 
 def peak_pick(x, pre_max, post_max, pre_avg, post_avg, delta, wait):
@@ -1484,23 +1305,23 @@ def sync(data, idx, aggregate=None, pad=True, axis=-1):
 
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
     >>> tempo, beats = librosa.beat.beat_track(y=y, sr=sr, trim=False)
-    >>> cqt = librosa.cqt(y=y, sr=sr)
-    >>> beats = librosa.util.fix_frames(beats, x_max=cqt.shape[1])
+    >>> C = np.abs(librosa.cqt(y=y, sr=sr))
+    >>> beats = librosa.util.fix_frames(beats, x_max=C.shape[1])
 
     By default, use mean aggregation
 
-    >>> cqt_avg = librosa.util.sync(cqt, beats)
+    >>> C_avg = librosa.util.sync(C, beats)
 
     Use median-aggregation instead of mean
 
-    >>> cqt_med = librosa.util.sync(cqt, beats,
+    >>> C_med = librosa.util.sync(C, beats,
     ...                             aggregate=np.median)
 
     Or sub-beat synchronization
 
-    >>> sub_beats = librosa.segment.subsegment(cqt, beats)
-    >>> sub_beats = librosa.util.fix_frames(sub_beats, x_max=cqt.shape[1])
-    >>> cqt_med_sub = librosa.util.sync(cqt, sub_beats, aggregate=np.median)
+    >>> sub_beats = librosa.segment.subsegment(C, beats)
+    >>> sub_beats = librosa.util.fix_frames(sub_beats, x_max=C.shape[1])
+    >>> C_med_sub = librosa.util.sync(C, sub_beats, aggregate=np.median)
 
 
     Plot the results
@@ -1510,18 +1331,18 @@ def sync(data, idx, aggregate=None, pad=True, axis=-1):
     >>> subbeat_t = librosa.frames_to_time(sub_beats, sr=sr)
     >>> plt.figure()
     >>> plt.subplot(3, 1, 1)
-    >>> librosa.display.specshow(librosa.amplitude_to_db(cqt,
+    >>> librosa.display.specshow(librosa.amplitude_to_db(C,
     ...                                                  ref=np.max),
     ...                          x_axis='time')
-    >>> plt.title('CQT power, shape={}'.format(cqt.shape))
+    >>> plt.title('CQT power, shape={}'.format(C.shape))
     >>> plt.subplot(3, 1, 2)
-    >>> librosa.display.specshow(librosa.amplitude_to_db(cqt_med,
+    >>> librosa.display.specshow(librosa.amplitude_to_db(C_med,
     ...                                                  ref=np.max),
     ...                          x_coords=beat_t, x_axis='time')
     >>> plt.title('Beat synchronous CQT power, '
-    ...           'shape={}'.format(cqt_med.shape))
+    ...           'shape={}'.format(C_med.shape))
     >>> plt.subplot(3, 1, 3)
-    >>> librosa.display.specshow(librosa.amplitude_to_db(cqt_med_sub,
+    >>> librosa.display.specshow(librosa.amplitude_to_db(C_med_sub,
     ...                                                  ref=np.max),
     ...                          x_coords=subbeat_t, x_axis='time')
     >>> plt.title('Sub-beat synchronous CQT power, '
@@ -1537,7 +1358,7 @@ def sync(data, idx, aggregate=None, pad=True, axis=-1):
 
     if np.all([isinstance(_, slice) for _ in idx]):
         slices = idx
-    elif np.all([np.issubdtype(type(_), np.int) for _ in idx]):
+    elif np.all([np.issubdtype(type(_), np.integer) for _ in idx]):
         slices = index_to_slice(np.asarray(idx), 0, shape[axis], pad=pad)
     else:
         raise ParameterError('Invalid index set: {}'.format(idx))
@@ -1553,7 +1374,7 @@ def sync(data, idx, aggregate=None, pad=True, axis=-1):
     for (i, segment) in enumerate(slices):
         idx_in[axis] = segment
         idx_agg[axis] = i
-        data_agg[idx_agg] = aggregate(data[idx_in], axis=axis)
+        data_agg[tuple(idx_agg)] = aggregate(data[tuple(idx_in)], axis=axis)
 
     return data_agg
 
@@ -1651,7 +1472,7 @@ def softmask(X, X_ref, power=1, split_zeros=False):
 
     # We're working with ints, cast to float.
     dtype = X.dtype
-    if not np.issubdtype(dtype, float):
+    if not np.issubdtype(dtype, np.floating):
         dtype = np.float32
 
     # Re-scale the input arrays relative to the larger value
@@ -1736,9 +1557,75 @@ def tiny(x):
     x = np.asarray(x)
 
     # Only floating types generate a tiny
-    if np.issubdtype(x.dtype, float) or np.issubdtype(x.dtype, complex):
+    if np.issubdtype(x.dtype, np.floating) or np.issubdtype(x.dtype, np.complexfloating):
         dtype = x.dtype
     else:
         dtype = np.float32
 
     return np.finfo(dtype).tiny
+
+
+def fill_off_diagonal(x, radius, value=0):
+    """Sets all cells of a matrix to a given ``value``
+    if they lie outside a constraint region.
+    In this case, the constraint region is the
+    Sakoe-Chiba band which runs with a fixed ``radius``
+    along the main diagonal.
+    When ``x.shape[0] != x.shape[1]``, the radius will be
+    expanded so that ``x[-1, -1] = 1`` always.
+
+    ``x`` will be modified in place.
+
+    Parameters
+    ----------
+    x : np.ndarray [shape=(N, M)]
+        Input matrix, will be modified in place.
+    radius : float
+        The band radius (1/2 of the width) will be
+        ``int(radius*min(x.shape))``.
+    value : int
+        ``x[n, m] = value`` when ``(n, m)`` lies outside the band.
+
+    Examples
+    --------
+    >>> x = np.ones((8, 8))
+    >>> librosa.util.fill_off_diagonal(x, 0.25)
+    >>> x
+    array([[1, 1, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 0, 0, 0, 0, 0],
+           [0, 1, 1, 1, 0, 0, 0, 0],
+           [0, 0, 1, 1, 1, 0, 0, 0],
+           [0, 0, 0, 1, 1, 1, 0, 0],
+           [0, 0, 0, 0, 1, 1, 1, 0],
+           [0, 0, 0, 0, 0, 1, 1, 1],
+           [0, 0, 0, 0, 0, 0, 1, 1]])
+    >>> x = np.ones((8, 12))
+    >>> librosa.util.fill_off_diagonal(x, 0.25)
+    >>> x
+    array([[1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+           [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+           [0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+           [0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+           [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+           [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0],
+           [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
+           [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]])
+    """
+    nx, ny = x.shape
+
+    # Calculate the radius in indices, rather than proportion
+    radius = np.round(radius * np.min(x.shape))
+
+    nx, ny = x.shape
+    offset = np.abs((x.shape[0] - x.shape[1]))
+
+    if nx < ny:
+        idx_u = np.triu_indices_from(x, k=radius + offset)
+        idx_l = np.tril_indices_from(x, k=-radius)
+    else:
+        idx_u = np.triu_indices_from(x, k=radius)
+        idx_l = np.tril_indices_from(x, k=-radius - offset)
+
+    # modify input matrix
+    x[idx_u] = value
+    x[idx_l] = value

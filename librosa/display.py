@@ -20,7 +20,8 @@ Display
 import warnings
 
 import numpy as np
-import matplotlib.pyplot as plt
+from matplotlib.cm import get_cmap
+from matplotlib.axes import Axes
 from matplotlib.ticker import Formatter, ScalarFormatter
 from matplotlib.ticker import LogLocator, FixedLocator, MaxNLocator
 from matplotlib.ticker import SymmetricalLogLocator
@@ -303,7 +304,7 @@ def cmap(data, robust=True, cmap_seq='magma', cmap_bool='gray_r', cmap_div='cool
     data = np.atleast_1d(data)
 
     if data.dtype == 'bool':
-        return plt.get_cmap(cmap_bool)
+        return get_cmap(cmap_bool)
 
     data = data[np.isfinite(data)]
 
@@ -316,9 +317,9 @@ def cmap(data, robust=True, cmap_seq='magma', cmap_bool='gray_r', cmap_div='cool
     min_val = np.percentile(data, min_p)
 
     if min_val >= 0 or max_val <= 0:
-        return plt.get_cmap(cmap_seq)
+        return get_cmap(cmap_seq)
 
-    return plt.get_cmap(cmap_div)
+    return get_cmap(cmap_div)
 
 
 def __envelope(x, hop):
@@ -326,8 +327,8 @@ def __envelope(x, hop):
     return util.frame(x, hop_length=hop, frame_length=hop).max(axis=0)
 
 
-def waveplot(y, sr=22050, max_points=5e4, x_axis='time', offset=0.0, max_sr=1000,
-             **kwargs):
+def waveplot(y, sr=22050, max_points=5e4, x_axis='time', offset=0.0,
+             max_sr=1000, ax=None, **kwargs):
     '''Plot the amplitude envelope of a waveform.
 
     If `y` is monophonic, a filled curve is drawn between `[-abs(y), abs(y)]`.
@@ -355,6 +356,9 @@ def waveplot(y, sr=22050, max_points=5e4, x_axis='time', offset=0.0, max_sr=1000
 
     x_axis : str {'time', 'off', 'none'} or None
         If 'time', the x-axis is given time tick-marks.
+
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on instead of the default `plt.gca()`.
 
     offset : float
         Horizontal offset (in time) to start the waveform plot
@@ -435,7 +439,7 @@ def waveplot(y, sr=22050, max_points=5e4, x_axis='time', offset=0.0, max_sr=1000
         y_top = y
         y_bottom = -y
 
-    axes = plt.gca()
+    axes = __check_axes(ax)
 
     kwargs.setdefault('color', next(axes._get_lines.prop_cycler)['color'])
 
@@ -461,6 +465,7 @@ def specshow(data, x_coords=None, y_coords=None,
              sr=22050, hop_length=512,
              fmin=None, fmax=None,
              bins_per_octave=12,
+             ax=None,
              **kwargs):
     '''Display a spectrogram/chromagram/cqt/etc.
 
@@ -542,6 +547,9 @@ def specshow(data, x_coords=None, y_coords=None,
     bins_per_octave : int > 0 [scalar]
         Number of bins per octave.  Used for CQT frequency scale.
 
+    ax : matplotlib.axes.Axes or None
+        Axes to plot on instead of the default `plt.gca()`.
+
     kwargs : additional keyword arguments
         Arguments passed through to `matplotlib.pyplot.pcolormesh`.
 
@@ -572,7 +580,7 @@ def specshow(data, x_coords=None, y_coords=None,
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
     >>> plt.figure(figsize=(12, 8))
 
-    >>> D = librosa.amplitude_to_db(librosa.stft(y), ref=np.max)
+    >>> D = librosa.amplitude_to_db(np.abs(librosa.stft(y)), ref=np.max)
     >>> plt.subplot(4, 2, 1)
     >>> librosa.display.specshow(D, y_axis='linear')
     >>> plt.colorbar(format='%+2.0f dB')
@@ -589,7 +597,7 @@ def specshow(data, x_coords=None, y_coords=None,
 
     Or use a CQT scale
 
-    >>> CQT = librosa.amplitude_to_db(librosa.cqt(y, sr=sr), ref=np.max)
+    >>> CQT = librosa.amplitude_to_db(np.abs(librosa.cqt(y, sr=sr)), ref=np.max)
     >>> plt.subplot(4, 2, 3)
     >>> librosa.display.specshow(CQT, y_axis='cqt_note')
     >>> plt.colorbar(format='%+2.0f dB')
@@ -653,7 +661,7 @@ def specshow(data, x_coords=None, y_coords=None,
     >>> plt.tight_layout()
     '''
 
-    if np.issubdtype(data.dtype, np.complex):
+    if np.issubdtype(data.dtype, np.complexfloating):
         warnings.warn('Trying to display complex-valued input. '
                       'Showing magnitude instead.')
         data = np.abs(data)
@@ -674,9 +682,9 @@ def specshow(data, x_coords=None, y_coords=None,
     y_coords = __mesh_coords(y_axis, y_coords, data.shape[0], **all_params)
     x_coords = __mesh_coords(x_axis, x_coords, data.shape[1], **all_params)
 
-    axes = plt.gca()
+    axes = __check_axes(ax)
     out = axes.pcolormesh(x_coords, y_coords, data, **kwargs)
-    plt.sci(out)
+    __set_current_image(ax, out)
 
     axes.set_xlim(x_coords.min(), x_coords.max())
     axes.set_ylim(y_coords.min(), y_coords.max())
@@ -690,6 +698,18 @@ def specshow(data, x_coords=None, y_coords=None,
     __decorate_axis(axes.yaxis, y_axis)
 
     return axes
+
+
+def __set_current_image(ax, img):
+    '''Helper to set the current image in pyplot mode.
+
+    If the provided `ax` is not `None`, then we assume that the user is using the object API.
+    In this case, the pyplot current image is not set.
+    '''
+
+    if ax is None:
+        import matplotlib.pyplot as plt
+        plt.sci(img)
 
 
 def __mesh_coords(ax_type, coords, n, **kwargs):
@@ -721,6 +741,17 @@ def __mesh_coords(ax_type, coords, n, **kwargs):
         raise ParameterError('Unknown axis type: {}'.format(ax_type))
 
     return coord_map[ax_type](n, **kwargs)
+
+
+def __check_axes(axes):
+    '''Check if "axes" is an instance of an axis object. If not, use `gca`.'''
+    if axes is None:
+        import matplotlib.pyplot as plt
+        axes = plt.gca()
+    elif not isinstance(axes, Axes):
+        raise ValueError("`axes` must be an instance of matplotlib.axes.Axes. "
+                         "Found type(axes)={}".format(type(axes)))
+    return axes
 
 
 def __scale_axes(axes, ax_type, which):

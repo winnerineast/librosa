@@ -38,7 +38,7 @@ def get_spec(y, sr):
     return librosa.stft(y), C, sr
 
 
-__EXAMPLE_FILE = 'data/test1_22050.wav'
+__EXAMPLE_FILE = os.path.join('data', 'test1_22050.wav')
 y, sr = librosa.load(__EXAMPLE_FILE)
 S, C, sr = get_spec(y, sr)
 S_abs = np.abs(S)
@@ -154,6 +154,17 @@ def test_xaxis_none_yaxis_linear():
     librosa.display.specshow(S_bin, y_axis='linear')
 
 
+@image_comparison(baseline_images=['specshow_ext_axes'], extensions=['png'])
+def test_specshow_ext_axes():
+    plt.figure()
+    ax_left = plt.subplot(1, 2, 1)
+    ax_right = plt.subplot(1, 2, 2)
+
+    # implicitly ax_right
+    librosa.display.specshow(S_abs, cmap='gray')
+    librosa.display.specshow(S_abs, cmap='magma', ax=ax_left)
+
+
 @image_comparison(baseline_images=['x_none_y_log'], extensions=['png'])
 def test_xaxis_none_yaxis_log():
     plt.figure()
@@ -244,7 +255,7 @@ def test_time_scales_auto():
 
     # sr = 22050, hop_length = 512, S.shape[1] = 198
     # 197 * 512 / 22050 ~= 4.6s
-    plt.figure()
+    plt.figure(figsize=(10, 10))
     plt.subplot(4, 1, 1)
     # sr * 10 -> ms
     librosa.display.specshow(S_abs, sr=10 * sr, x_axis='time')
@@ -276,6 +287,17 @@ def test_waveplot_mono():
 
     plt.subplot(3, 1, 3)
     librosa.display.waveplot(y, sr=sr, x_axis='time')
+
+
+@image_comparison(baseline_images=['waveplot_ext_axes'], extensions=['png'])
+def test_waveplot_ext_axes():
+    plt.figure()
+    ax_left = plt.subplot(1, 2, 1)
+    ax_right = plt.subplot(1, 2, 2)
+
+    # implicitly ax_right
+    librosa.display.waveplot(y, color='blue')
+    librosa.display.waveplot(y, color='red', ax=ax_left)
 
 
 @image_comparison(baseline_images=['waveplot_stereo'], extensions=['png'])

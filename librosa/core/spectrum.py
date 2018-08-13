@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''Utilities for spectral processing'''
+import warnings
 
 import numpy as np
 import scipy.fftpack as fft
 import scipy
+import scipy.ndimage
 import scipy.signal
 import scipy.interpolate
 import six
@@ -15,13 +17,14 @@ from .. import cache
 from .. import util
 from ..util.exceptions import ParameterError
 from ..filters import get_window, semitone_filterbank
+from ..filters import window_sumsquare
 
 __all__ = ['stft', 'istft', 'magphase', 'iirt',
            'ifgram', 'phase_vocoder',
            'perceptual_weighting',
            'power_to_db', 'db_to_power',
            'amplitude_to_db', 'db_to_amplitude',
-           'fmt']
+           'fmt', 'pcen']
 
 
 @cache(level=20)
@@ -71,7 +74,7 @@ def stft(y, n_fft=2048, hop_length=None, win_length=None, window='hann',
     dtype       : numeric type
         Complex numeric type for `D`.  Default is 64-bit complex.
 
-    mode : string
+    pad_mode : string
         If `center=True`, the padding mode to use at the edges of the signal.
         By default, STFT uses reflection padding.
 
@@ -99,33 +102,34 @@ def stft(y, n_fft=2048, hop_length=None, win_length=None, window='hann',
     --------
 
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
-    >>> D = librosa.stft(y)
+    >>> D = np.abs(librosa.stft(y))
     >>> D
-    array([[  2.576e-03 -0.000e+00j,   4.327e-02 -0.000e+00j, ...,
-              3.189e-04 -0.000e+00j,  -5.961e-06 -0.000e+00j],
-           [  2.441e-03 +2.884e-19j,   5.145e-02 -5.076e-03j, ...,
-             -3.885e-04 -7.253e-05j,   7.334e-05 +3.868e-04j],
-          ...,
-           [ -7.120e-06 -1.029e-19j,  -1.951e-09 -3.568e-06j, ...,
-             -4.912e-07 -1.487e-07j,   4.438e-06 -1.448e-05j],
-           [  7.136e-06 -0.000e+00j,   3.561e-06 -0.000e+00j, ...,
-             -5.144e-07 -0.000e+00j,  -1.514e-05 -0.000e+00j]], dtype=complex64)
+    array([[2.58028018e-03, 4.32422794e-02, 6.61255598e-01, ...,
+            6.82710262e-04, 2.51654536e-04, 7.23036574e-05],
+           [2.49403086e-03, 5.15930466e-02, 6.00107312e-01, ...,
+            3.48026224e-04, 2.35853557e-04, 7.54836728e-05],
+           [7.82410789e-04, 1.05394892e-01, 4.37517226e-01, ...,
+            6.29352580e-04, 3.38571583e-04, 8.38094638e-05],
+           ...,
+           [9.48568513e-08, 4.74725084e-07, 1.50052492e-05, ...,
+            1.85637656e-08, 2.89708542e-08, 5.74304337e-09],
+           [1.25165826e-07, 8.58259284e-07, 1.11157215e-05, ...,
+            3.49099771e-08, 3.11740926e-08, 5.29926236e-09],
+           [1.70630571e-07, 8.92518756e-07, 1.23656537e-05, ...,
+            5.33256745e-08, 3.33264900e-08, 5.13272980e-09]], dtype=float32)
 
 
     Use left-aligned frames, instead of centered frames
 
-
-    >>> D_left = librosa.stft(y, center=False)
+    >>> D_left = np.abs(librosa.stft(y, center=False))
 
 
     Use a shorter hop length
 
-
-    >>> D_short = librosa.stft(y, hop_length=64)
+    >>> D_short = np.abs(librosa.stft(y, hop_length=64))
 
 
     Display a spectrogram
-
 
     >>> import matplotlib.pyplot as plt
     >>> librosa.display.specshow(librosa.amplitude_to_db(D,
@@ -287,8 +291,6 @@ def istft(stft_matrix, hop_length=None, win_length=None, window='hann',
     n_frames = stft_matrix.shape[1]
     expected_signal_len = n_fft + hop_length * (n_frames - 1)
     y = np.zeros(expected_signal_len, dtype=dtype)
-    ifft_window_sum = np.zeros(expected_signal_len, dtype=dtype)
-    ifft_window_square = ifft_window * ifft_window
 
     for i in range(n_frames):
         sample = i * hop_length
@@ -297,9 +299,15 @@ def istft(stft_matrix, hop_length=None, win_length=None, window='hann',
         ytmp = ifft_window * fft.ifft(spec).real
 
         y[sample:(sample + n_fft)] = y[sample:(sample + n_fft)] + ytmp
-        ifft_window_sum[sample:(sample + n_fft)] += ifft_window_square
 
     # Normalize by sum of squared window
+    ifft_window_sum = window_sumsquare(window,
+                                       n_frames,
+                                       win_length=win_length,
+                                       n_fft=n_fft,
+                                       hop_length=hop_length,
+                                       dtype=dtype)
+
     approx_nonzero_indices = ifft_window_sum > util.tiny(ifft_window_sum)
     y[approx_nonzero_indices] /= ifft_window_sum[approx_nonzero_indices]
 
@@ -391,7 +399,7 @@ def ifgram(y, sr=22050, n_fft=2048, hop_length=None, win_length=None,
     dtype : numeric type
         Complex numeric type for `D`.  Default is 64-bit complex.
 
-    mode : string
+    pad_mode : string
         If `center=True`, the padding mode to use at the edges of the signal.
         By default, STFT uses reflection padding.
 
@@ -475,7 +483,7 @@ def ifgram(y, sr=22050, n_fft=2048, hop_length=None, win_length=None,
     return if_gram, stft_matrix
 
 
-def magphase(D):
+def magphase(D, power=1):
     """Separate a complex-valued spectrogram D into its magnitude (S)
     and phase (P) components, so that `D = S * P`.
 
@@ -484,12 +492,15 @@ def magphase(D):
     ----------
     D       : np.ndarray [shape=(d, t), dtype=complex]
         complex-valued spectrogram
+    power : float > 0
+        Exponent for the magnitude spectrogram,
+        e.g., 1 for energy, 2 for power, etc.
 
 
     Returns
     -------
     D_mag   : np.ndarray [shape=(d, t), dtype=real]
-        magnitude of `D`
+        magnitude of `D`, raised to `power`
     D_phase : np.ndarray [shape=(d, t), dtype=complex]
         `exp(1.j * phi)` where `phi` is the phase of `D`
 
@@ -529,6 +540,7 @@ def magphase(D):
     """
 
     mag = np.abs(D)
+    mag **= power
     phase = np.exp(1.j * np.angle(D))
 
     return mag, phase
@@ -621,6 +633,7 @@ def phase_vocoder(D, rate, hop_length=None):
     return d_stretch
 
 
+@cache(level=20)
 def iirt(y, sr=22050, win_length=2048, hop_length=None, center=True,
          tuning=0.0, pad_mode='reflect', **kwargs):
     r'''Time-frequency representation using IIR filters [1]_.
@@ -637,8 +650,9 @@ def iirt(y, sr=22050, win_length=2048, hop_length=None, center=True,
 
     When called with the default set of parameters, it will generate the TF-representation
     as described in [1]_ (pitch filterbank):
-     * 85 filters with MIDI pitches [24, 108] as `center_freqs`.
-     * each filter having a bandwith of one semitone.
+
+        * 85 filters with MIDI pitches [24, 108] as `center_freqs`.
+        * each filter having a bandwith of one semitone.
 
     .. [1] Müller, Meinard.
            "Information Retrieval for Music and Motion."
@@ -693,7 +707,7 @@ def iirt(y, sr=22050, win_length=2048, hop_length=None, center=True,
     --------
     >>> import matplotlib.pyplot as plt
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
-    >>> D = librosa.iirt(y)
+    >>> D = np.abs(librosa.iirt(y))
     >>> librosa.display.specshow(librosa.amplitude_to_db(D, ref=np.max),
     ...                          y_axis='cqt_hz', x_axis='time')
     >>> plt.title('Semitone spectrogram')
@@ -842,10 +856,18 @@ def power_to_db(S, ref=1.0, amin=1e-10, top_db=80.0):
 
     """
 
+    S = np.asarray(S)
+
     if amin <= 0:
         raise ParameterError('amin must be strictly positive')
 
-    magnitude = np.abs(S)
+    if np.issubdtype(S.dtype, np.complexfloating):
+        warnings.warn('power_to_db was called on complex input so phase '
+                      'information will be discarded. To suppress this warning, '
+                      'call power_to_db(np.abs(D)**2) instead.')
+        magnitude = np.abs(S)
+    else:
+        magnitude = S
 
     if six.callable(ref):
         # User supplied a function to calculate reference power
@@ -931,6 +953,14 @@ def amplitude_to_db(S, ref=1.0, amin=1e-5, top_db=80.0):
     -----
     This function caches at level 30.
     '''
+
+    S = np.asarray(S)
+
+    if np.issubdtype(S.dtype, np.complexfloating):
+        warnings.warn('amplitude_to_db was called on complex input so phase '
+                      'information will be discarded. To suppress this warning, '
+                      'call amplitude_to_db(np.abs(S)) instead.')
+
     magnitude = np.abs(S)
 
     if six.callable(ref):
@@ -939,8 +969,9 @@ def amplitude_to_db(S, ref=1.0, amin=1e-5, top_db=80.0):
     else:
         ref_value = np.abs(ref)
 
-    magnitude **= 2
-    return power_to_db(magnitude, ref=ref_value**2, amin=amin**2,
+    power = np.square(magnitude, out=magnitude)
+
+    return power_to_db(power, ref=ref_value**2, amin=amin**2,
                        top_db=top_db)
 
 
@@ -1008,10 +1039,10 @@ def perceptual_weighting(S, frequencies, **kwargs):
     Re-weight a CQT power spectrum, using peak power as reference
 
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
-    >>> CQT = librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz('A1'))
-    >>> freqs = librosa.cqt_frequencies(CQT.shape[0],
+    >>> C = np.abs(librosa.cqt(y, sr=sr, fmin=librosa.note_to_hz('A1')))
+    >>> freqs = librosa.cqt_frequencies(C.shape[0],
     ...                                 fmin=librosa.note_to_hz('A1'))
-    >>> perceptual_CQT = librosa.perceptual_weighting(CQT**2,
+    >>> perceptual_CQT = librosa.perceptual_weighting(C**2,
     ...                                               freqs,
     ...                                               ref=np.max)
     >>> perceptual_CQT
@@ -1024,7 +1055,7 @@ def perceptual_weighting(S, frequencies, **kwargs):
     >>> import matplotlib.pyplot as plt
     >>> plt.figure()
     >>> plt.subplot(2, 1, 1)
-    >>> librosa.display.specshow(librosa.amplitude_to_db(CQT,
+    >>> librosa.display.specshow(librosa.amplitude_to_db(C,
     ...                                                  ref=np.max),
     ...                          fmin=librosa.note_to_hz('A1'),
     ...                          y_axis='cqt_hz')
@@ -1249,7 +1280,212 @@ def fmt(y, t_min=0.5, n_fmt=None, kind='cubic', beta=0.5, over_sample=1, axis=-1
     idx[axis] = slice(0, 1 + n_fmt//2)
 
     # Truncate and length-normalize
-    return result[idx] * np.sqrt(n) / n_fmt
+    return result[tuple(idx)] * np.sqrt(n) / n_fmt
+
+
+@cache(level=30)
+def pcen(S, sr=22050, hop_length=512, gain=0.98, bias=2, power=0.5,
+         time_constant=0.400, eps=1e-6, b=None, max_size=1, ref=None,
+         axis=-1, max_axis=None):
+    '''Per-channel energy normalization (PCEN) [1]_
+
+    This function normalizes a time-frequency representation `S` by
+    performing automatic gain control, followed by nonlinear compression:
+
+        P[f, t] = (S / (eps + M[f, t])**gain + bias)**power - bias**power
+
+    where `M` is the result of applying a low-pass, temporal IIR filter
+    to `S`:
+
+        M[f, t] = (1 - b) * M[f, t - 1] + b * S[f, t]
+
+    If `b` is not provided, it is calculated as:
+
+        b = (sqrt(1 + 4* T**2) - 1) / (2 * T**2)
+
+    where `T = time_constant * sr / hop_length`.
+
+    This normalization is designed to suppress background noise and
+    emphasize foreground signals, and can be used as an alternative to
+    decibel scaling (`amplitude_to_db`).
+
+    This implementation also supports smoothing across frequency bins
+    by specifying `max_size > 1`.  If this option is used, the filtered
+    spectrogram `M` is computed as
+
+        M[f, t] = (1 - b) * M[f, t - 1] + b * R[f, t]
+
+    where `R` has been max-filtered along the frequency axis, similar to
+    the SuperFlux algorithm implemented in `onset.onset_strength`:
+
+        R[f, t] = max(S[f - max_size//2: f + max_size//2, t])
+
+    This can be used to perform automatic gain control on signals that cross
+    or span multiple frequency bans, which may be desirable for spectrograms
+    with high frequency resolution.
+
+    .. [1] Wang, Y., Getreuer, P., Hughes, T., Lyon, R. F., & Saurous, R. A.
+       (2017, March). Trainable frontend for robust and far-field keyword spotting.
+       In Acoustics, Speech and Signal Processing (ICASSP), 2017
+       IEEE International Conference on (pp. 5670-5674). IEEE.
+
+    Parameters
+    ----------
+    S : np.ndarray (non-negative)
+        The input (magnitude) spectrogram
+
+    sr : number > 0 [scalar]
+        The audio sampling rate
+
+    hop_length : int > 0 [scalar]
+        The hop length of `S`, expressed in samples
+
+    gain : number >= 0 [scalar]
+        The gain factor.  Typical values should be slightly less than 1.
+
+    bias : number >= 0 [scalar]
+        The bias point of the nonlinear compression (default: 2)
+
+    power : number > 0 [scalar]
+        The compression exponent.  Typical values should be between 0 and 1.
+        Smaller values of `power` result in stronger compression.
+
+    time_constant : number > 0 [scalar]
+        The time constant for IIR filtering, measured in seconds.
+
+    eps : number > 0 [scalar]
+        A small constant used to ensure numerical stability of the filter.
+
+    b : number in [0, 1]  [scalar]
+        The filter coefficient for the low-pass filter.
+        If not provided, it will be inferred from `time_constant`.
+
+    max_size : int > 0 [scalar]
+        The width of the max filter applied to the frequency axis.
+        If left as `1`, no filtering is performed.
+
+    ref : None or np.ndarray (shape=S.shape)
+        An optional pre-computed reference spectrum (`R` in the above).
+        If not provided it will be computed from `S`.
+
+    axis : int [scalar]
+        The (time) axis of the input spectrogram.
+
+    max_axis : None or int [scalar]
+        The frequency axis of the input spectrogram.
+        If `None`, and `S` is two-dimensional, it will be inferred
+        as the opposite from `axis`.
+        If `S` is not two-dimensional, and `max_size > 1`, an error
+        will be raised.
+
+    Returns
+    -------
+    P : np.ndarray, non-negative [shape=(n, m)]
+        The per-channel energy normalized version of `S`.
+
+    See Also
+    --------
+    amplitude_to_db
+    librosa.onset.onset_strength
+
+    Examples
+    --------
+
+    Compare PCEN to log amplitude (dB) scaling on Mel spectra
+
+    >>> import matplotlib.pyplot as plt
+    >>> y, sr = librosa.load(librosa.util.example_audio_file(),
+    ...                      offset=10, duration=10)
+
+    >>> # We'll use power=1 to get a magnitude spectrum
+    >>> # instead of a power spectrum
+    >>> S = librosa.feature.melspectrogram(y, sr=sr, power=1)
+    >>> log_S = librosa.amplitude_to_db(S, ref=np.max)
+    >>> pcen_S = librosa.pcen(S)
+    >>> plt.figure()
+    >>> plt.subplot(2,1,1)
+    >>> librosa.display.specshow(log_S, x_axis='time', y_axis='mel')
+    >>> plt.title('log amplitude (dB)')
+    >>> plt.colorbar()
+    >>> plt.subplot(2,1,2)
+    >>> librosa.display.specshow(pcen_S, x_axis='time', y_axis='mel')
+    >>> plt.title('Per-channel energy normalization')
+    >>> plt.colorbar()
+    >>> plt.tight_layout()
+
+    Compare PCEN with and without max-filtering
+
+    >>> pcen_max = librosa.pcen(S, max_size=3)
+    >>> plt.figure()
+    >>> plt.subplot(2,1,1)
+    >>> librosa.display.specshow(pcen_S, x_axis='time', y_axis='mel')
+    >>> plt.title('Per-channel energy normalization (no max-filter)')
+    >>> plt.colorbar()
+    >>> plt.subplot(2,1,2)
+    >>> librosa.display.specshow(pcen_max, x_axis='time', y_axis='mel')
+    >>> plt.title('Per-channel energy normalization (max_size=3)')
+    >>> plt.colorbar()
+    >>> plt.tight_layout()
+
+    '''
+
+    if power <= 0:
+        raise ParameterError('power={} must be strictly positive'.format(power))
+
+    if gain < 0:
+        raise ParameterError('gain={} must be non-negative'.format(gain))
+
+    if bias < 0:
+        raise ParameterError('bias={} must be non-negative'.format(bias))
+
+    if eps <= 0:
+        raise ParameterError('eps={} must be strictly positive'.format(eps))
+
+    if time_constant <= 0:
+        raise ParameterError('time_constant={} must be strictly positive'.format(time_constant))
+
+    if max_size < 1 or not isinstance(max_size, int):
+        raise ParameterError('max_size={} must be a positive integer'.format(max_size))
+
+    if b is None:
+        t_frames = time_constant * sr / float(hop_length)
+        # By default, this solves the equation for b:
+        #   b**2  + (1 - b) / t_frames  - 2 = 0
+        # which approximates the full-width half-max of the
+        # squared frequency response of the IIR low-pass filter
+
+        b = (np.sqrt(1 + 4 * t_frames**2) - 1) / (2 * t_frames**2)
+
+    if not 0 <= b <= 1:
+        raise ParameterError('b={} must be between 0 and 1'.format(b))
+
+    if np.issubdtype(S.dtype, np.complexfloating):
+        warnings.warn('pcen was called on complex input so phase '
+                      'information will be discarded. To suppress this warning, '
+                      'call pcen(np.abs(D)) instead.')
+        S = np.abs(S)
+
+    if ref is None:
+        if max_size == 1:
+            ref = S
+        elif S.ndim == 1:
+            raise ParameterError('Max-filtering cannot be applied to 1-dimensional input')
+        else:
+            if max_axis is None:
+                if S.ndim != 2:
+                    raise ParameterError('Max-filtering a {:d}-dimensional spectrogram '
+                                         'requires you to specify max_axis'.format(S.ndim))
+                # if axis = 0, max_axis=1
+                # if axis = +- 1, max_axis = 0
+                max_axis = np.mod(1 - axis, 2)
+
+            ref = scipy.ndimage.maximum_filter1d(S, max_size, axis=max_axis)
+
+    S_smooth = scipy.signal.lfilter([b], [1, b - 1], ref, axis=axis)
+
+    # Working in log-space gives us some stability, and a slight speedup
+    smooth = np.exp(-gain * (np.log(eps) + np.log1p(S_smooth / eps)))
+    return (S * smooth + bias)**power - bias**power
 
 
 def _spectrogram(y=None, S=None, n_fft=2048, hop_length=512, power=1):

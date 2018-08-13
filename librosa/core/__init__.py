@@ -16,6 +16,8 @@ Audio processing
     autocorrelate
     zero_crossings
     clicks
+    tone
+    chirp
 
 Spectral representations
 ------------------------
@@ -26,8 +28,10 @@ Spectral representations
     istft
     ifgram
     cqt
+    icqt
     hybrid_cqt
     pseudo_cqt
+    iirt
     fmt
 
     interp_harmonics
@@ -48,6 +52,8 @@ Magnitude scaling
 
     perceptual_weighting
     A_weighting
+
+    pcen
 
 Time and frequency conversion
 -----------------------------
@@ -78,6 +84,9 @@ Time and frequency conversion
     mel_frequencies
     tempo_frequencies
 
+    samples_like
+    times_like
+
 
 Pitch and tuning
 ----------------
@@ -88,21 +97,13 @@ Pitch and tuning
     pitch_tuning
     piptrack
 
-Dynamic Time Warping
---------------------
+Deprecated (moved)
+------------------
 .. autosummary::
     :toctree: generated/
 
     dtw
     fill_off_diagonal
-
-
-Deprecated
-----------
-.. autosummary::
-    :toctree: generated/
-
-    logamplitude
 """
 
 from .time_frequency import *  # pylint: disable=wildcard-import
@@ -110,7 +111,13 @@ from .audio import *  # pylint: disable=wildcard-import
 from .spectrum import *  # pylint: disable=wildcard-import
 from .pitch import *  # pylint: disable=wildcard-import
 from .constantq import *  # pylint: disable=wildcard-import
-from .dtw import *  # pylint: disable=wildcard-import
 from .harmonic import *  # pylint: disable=wildcard-import
+
+from ..util.decorators import moved as _moved
+from ..util import fill_off_diagonal as _fod
+from ..sequence import dtw as _dtw
+
+dtw = _moved('librosa.sequence.dtw', '0.6.1', '0.7')(_dtw)
+fill_off_diagonal = _moved('librosa.util.fill_off_diagonal', '0.6.1', '0.7')(_fod)
 
 __all__ = [_ for _ in dir() if not _.startswith('_')]

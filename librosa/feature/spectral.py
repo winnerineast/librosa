@@ -5,6 +5,7 @@
 import numpy as np
 import scipy
 import scipy.signal
+import scipy.fftpack
 
 from .. import util
 from .. import filters
@@ -21,6 +22,7 @@ __all__ = ['spectral_centroid',
            'spectral_bandwidth',
            'spectral_contrast',
            'spectral_rolloff',
+           'spectral_flatness',
            'poly_features',
            'rmse',
            'zero_crossing_rate',
@@ -399,7 +401,13 @@ def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
 def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
                      freq=None, roll_percent=0.85):
-    '''Compute roll-off frequency
+    '''Compute roll-off frequency.
+
+    The roll-off frequency is defined for each frame as the center frequency
+    for a spectrogram bin such that at least roll_percent (0.85 by default)
+    of the energy of the spectrum in this frame is contained in this bin and
+    the bins below. This can be used to, e.g., approximate the maximum (or
+    minimum) frequency by setting roll_percent to a value close to 1 (or 0).
 
     Parameters
     ----------
@@ -439,9 +447,16 @@ def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     From time-series input
 
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
+    >>> # Approximate maximum frequencies with roll_percent=0.85 (default)
     >>> rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)
     >>> rolloff
     array([[ 8376.416,   968.994, ...,  8925.513,  9108.545]])
+    >>> # Approximate minimum frequencies with roll_percent=0.1
+    >>> rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.1)
+    >>> rolloff
+    array([[ 75.36621094,  64.59960938,  64.59960938, ...,  75.36621094,
+         75.36621094,  64.59960938]])
+
 
     From spectrogram input
 
@@ -497,6 +512,94 @@ def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     ind = np.where(total_energy < threshold, np.nan, 1)
 
     return np.nanmin(ind * freq, axis=0, keepdims=True)
+
+
+def spectral_flatness(y=None, S=None, n_fft=2048, hop_length=512,
+                      amin=1e-10, power=2.0):
+    '''Compute spectral flatness
+
+    Spectral flatness (or tonality coefficient) is a measure to
+    quantify how much noise-like a sound is, as opposed to being
+    tone-like [1]_. A high spectral flatness (closer to 1.0)
+    indicates the spectrum is similar to white noise.
+    It is often converted to decibel.
+
+    .. [1] Dubnov, Shlomo  "Generalization of spectral flatness
+           measure for non-gaussian linear processes"
+           IEEE Signal Processing Letters, 2004, Vol. 11.
+
+    Parameters
+    ----------
+    y : np.ndarray [shape=(n,)] or None
+        audio time series
+
+    S : np.ndarray [shape=(d, t)] or None
+        (optional) pre-computed spectrogram magnitude
+
+    n_fft : int > 0 [scalar]
+        FFT window size
+
+    hop_length : int > 0 [scalar]
+        hop length for STFT. See `librosa.core.stft` for details.
+
+    amin : float > 0 [scalar]
+        minimum threshold for `S` (=added noise floor for numerical stability)
+
+    power : float > 0 [scalar]
+        Exponent for the magnitude spectrogram.
+        e.g., 1 for energy, 2 for power, etc.
+        Power spectrogram is usually used for computing spectral flatness.
+
+    Returns
+    -------
+    flatness : np.ndarray [shape=(1, t)]
+        spectral flatness for each frame.
+        The returned value is in [0, 1] and often converted to dB scale.
+
+
+    Examples
+    --------
+    From time-series input
+
+    >>> y, sr = librosa.load(librosa.util.example_audio_file())
+    >>> flatness = librosa.feature.spectral_flatness(y=y)
+    >>> flatness
+    array([[  1.00000e+00,   5.82299e-03,   5.64624e-04, ...,   9.99063e-01,
+          1.00000e+00,   1.00000e+00]], dtype=float32)
+
+    From spectrogram input
+
+    >>> S, phase = librosa.magphase(librosa.stft(y))
+    >>> librosa.feature.spectral_flatness(S=S)
+    array([[  1.00000e+00,   5.82299e-03,   5.64624e-04, ...,   9.99063e-01,
+          1.00000e+00,   1.00000e+00]], dtype=float32)
+
+    From power spectrogram input
+
+    >>> S, phase = librosa.magphase(librosa.stft(y))
+    >>> S_power = S ** 2
+    >>> librosa.feature.spectral_flatness(S=S_power, power=1.0)
+    array([[  1.00000e+00,   5.82299e-03,   5.64624e-04, ...,   9.99063e-01,
+          1.00000e+00,   1.00000e+00]], dtype=float32)
+
+    '''
+    if amin <= 0:
+        raise ParameterError('amin must be strictly positive')
+
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            power=1.)
+
+    if not np.isrealobj(S):
+        raise ParameterError('Spectral flatness is only defined '
+                             'with real-valued input')
+    elif np.any(S < 0):
+        raise ParameterError('Spectral flatness is only defined '
+                             'with non-negative energies')
+
+    S_thresh = np.maximum(amin, S ** power)
+    gmean = np.exp(np.mean(np.log(S_thresh), axis=0, keepdims=True))
+    amean = np.mean(S_thresh, axis=0, keepdims=True)
+    return gmean / amean
 
 
 def rmse(y=None, S=None, frame_length=2048, hop_length=512,
@@ -1101,7 +1204,7 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
         chroma_quant += (chroma > cur_quant_step) * QUANT_WEIGHTS[cur_quant_step_idx]
 
     # Apply temporal smoothing
-    win = scipy.signal.hanning(win_len_smooth + 2)
+    win = filters.get_window('hann', win_len_smooth + 2, fftbins=False)
     win /= np.sum(win)
     win = np.atleast_2d(win)
 
@@ -1215,8 +1318,8 @@ def tonnetz(y=None, sr=22050, chroma=None):
 
 
 # -- Mel spectrogram and MFCCs -- #
-def mfcc(y=None, sr=22050, S=None, n_mfcc=20, **kwargs):
-    """Mel-frequency cepstral coefficients
+def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs):
+    """Mel-frequency cepstral coefficients (MFCCs)
 
     Parameters
     ----------
@@ -1232,6 +1335,16 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, **kwargs):
     n_mfcc: int > 0 [scalar]
         number of MFCCs to return
 
+    dct_type : None, or {1, 2, 3}
+        Discrete cosine transform (DCT) type.
+        By default, DCT type-2 is used.
+
+    norm : None or 'ortho'
+        If `dct_type` is `2 or 3`, setting `norm='ortho'` uses an ortho-normal
+        DCT basis.
+
+        Normalization is not supported for `dct_type=1`.
+
     kwargs : additional keyword arguments
         Arguments to `melspectrogram`, if operating
         on time series input
@@ -1244,12 +1357,13 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, **kwargs):
     See Also
     --------
     melspectrogram
+    scipy.fftpack.dct
 
     Examples
     --------
     Generate mfccs from a time series
 
-    >>> y, sr = librosa.load(librosa.util.example_audio_file())
+    >>> y, sr = librosa.load(librosa.util.example_audio_file(), offset=30, duration=5)
     >>> librosa.feature.mfcc(y=y, sr=sr)
     array([[ -5.229e+02,  -4.944e+02, ...,  -5.229e+02,  -5.229e+02],
            [  7.105e-15,   3.787e+01, ...,  -7.105e-15,  -7.105e-15],
@@ -1281,13 +1395,26 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, **kwargs):
     >>> plt.title('MFCC')
     >>> plt.tight_layout()
 
+    Compare different DCT bases
 
+    >>> m_slaney = librosa.feature.mfcc(y=y, sr=sr, dct_type=2)
+    >>> m_htk = librosa.feature.mfcc(y=y, sr=sr, dct_type=3)
+    >>> plt.figure(figsize=(10, 6))
+    >>> plt.subplot(2, 1, 1)
+    >>> librosa.display.specshow(m_slaney, x_axis='time')
+    >>> plt.title('RASTAMAT / Auditory toolbox (dct_type=2)')
+    >>> plt.colorbar()
+    >>> plt.subplot(2, 1, 2)
+    >>> librosa.display.specshow(m_htk, x_axis='time')
+    >>> plt.title('HTK-style (dct_type=3)')
+    >>> plt.colorbar()
+    >>> plt.tight_layout()
     """
 
     if S is None:
         S = power_to_db(melspectrogram(y=y, sr=sr, **kwargs))
 
-    return np.dot(filters.dct(n_mfcc, S.shape[0]), S)
+    return scipy.fftpack.dct(S, axis=0, type=dct_type, norm=norm)[:n_mfcc]
 
 
 def melspectrogram(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,

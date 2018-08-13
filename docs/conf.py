@@ -34,6 +34,8 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.viewcode',
               'sphinx.ext.intersphinx',
               'sphinx.ext.doctest',
+              'sphinx.ext.mathjax',
+              'sphinx_gallery.gen_gallery',
               'numpydoc',
               'sphinx.ext.autosummary']
 
@@ -56,6 +58,22 @@ if use_matplotlib_plot_directive:
     extensions.append('matplotlib.sphinxext.plot_directive')
 else:
     raise RuntimeError("You need a recent enough version of matplotlib")
+
+# Galley
+sphinx_gallery_conf = {
+        'examples_dirs': 'examples/',
+        'gallery_dirs': 'auto_examples',
+        'backreferences_dir': False,
+        'reference_url': {
+            'sphinx_gallery': None,
+            'numpy': 'http://docs.scipy.org/doc/numpy/',
+            'np': 'http://docs.scipy.org/doc/numpy/',
+            'scipy': 'http://docs.scipy.org/doc/scipy/reference',
+            'matplotlib': 'http://matplotlib.org/',
+            'sklearn': 'http://scikit-learn.org/stable',
+            'resampy': 'https://resampy.readthedocs.io/en/latest/',
+        }
+    }
 
 # Generate plots for example sections
 numpydoc_use_plots = True
@@ -122,7 +140,9 @@ intersphinx_mapping = {'python': ('https://docs.python.org/3', None),
                        'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
                        'matplotlib': ('http://matplotlib.org/', None),
                        'sklearn': ('http://scikit-learn.org/stable/', None),
-                       'resampy': ('http://resampy.readthedocs.io/en/latest/', None)}
+                       'resampy': ('http://resampy.readthedocs.io/en/latest/', None),
+                       'soundfile': ('https://pysoundfile.readthedocs.io/en/latest', None),
+                       'librosa_gallery': ('https://librosa.github.io/librosa_gallery/', None)}
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -138,7 +158,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'librosa'
-copyright = u'2013--2017, librosa development team'
+copyright = u'2013--2018, librosa development team'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -378,7 +398,8 @@ autodoc_member_order = 'bysource'
 # Sphinx-contrib versioning
 import re
 scv_whitelist_branches = ('master',)
-scv_whitelist_tags = (re.compile(r'^v?0\.[45]\.\d+(rc\d+)?$'),)
+#scv_whitelist_tags = (re.compile(r'^v?\d\.\d\.\d+(rc\d+)?$'),)  # use this for RC builds
+scv_whitelist_tags = (re.compile(r'^v?\d\.\d\.\d+$'),)  # use this for final builds
 scv_greatest_tag = True
 scv_banner_greatest_tag = True
 scv_show_banner = True

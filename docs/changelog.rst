@@ -1,5 +1,178 @@
-Release notes
-=============
+Changelog
+=========
+
+v0.6.2
+------
+2018-08-09
+
+Bug fixes
+    - `#730`_ Fixed cache support for ``joblib>=0.12``.  *Matt Vollrath*
+
+New features
+    - `#735`_ Added `core.times_like` and `core.samples_like` to generate time and sample indices
+      corresponding to an existing feature matrix or shape specification. *Steve Tjoa*
+    - `#750`_, `#753`_ Added `core.tone` and `core.chirp` signal generators. *Ziyao Wei*
+
+Other changes
+    - `#727`_ updated documentation for `core.get_duration`. *Zhen Wang*
+    - `#731`_ fixed a typo in documentation for `core.fft_frequencies`. *Ziyao Wei*
+    - `#734`_ expanded documentation for `feature.spectrall_rolloff`. *Ziyao Wei*
+    - `#751`_ fixed example documentation for proper handling of phase in dB-scaling. *Vincent Lostanlen*
+    - `#755`_ forward support and future-proofing for fancy indexing with ``numpy>1.15``. *Brian McFee*
+
+.. _#730: https://github.com/librosa/librosa/pull/730
+.. _#735: https://github.com/librosa/librosa/pull/735
+.. _#750: https://github.com/librosa/librosa/pull/750
+.. _#753: https://github.com/librosa/librosa/pull/753
+.. _#727: https://github.com/librosa/librosa/pull/727
+.. _#731: https://github.com/librosa/librosa/pull/731
+.. _#734: https://github.com/librosa/librosa/pull/734
+.. _#751: https://github.com/librosa/librosa/pull/751
+.. _#755: https://github.com/librosa/librosa/pull/755
+
+v0.6.1
+------
+2018-05-24
+
+Bug fixes
+
+  - `#677`_ `util.find_files` now correctly de-duplicates files on case-insensitive platforms. *Brian McFee*
+  - `#713`_ `util.valid_intervals` now checks for non-negative durations. *Brian McFee, Dana Lee*
+  - `#714`_ `util.match_intervals` can now explicitly fail when no matches are possible. *Brian McFee, Dana Lee*
+
+New features
+
+  - `#679`_, `#708`_ `core.pcen`, per-channel energy normalization. *Vincent Lostanlen, Brian McFee*
+  - `#682`_ added different DCT modes to `feature.mfcc`. *Brian McFee*
+  - `#687`_ `display` functions now accept target axes. *Pius Friesch*
+  - `#688`_ numba-accelerated `util.match_events`. *Dana Lee*
+  - `#710`_ `sequence` module and Viterbi decoding for generative, discriminative, and multi-label hidden Markov models. *Brian McFee*
+  - `#714`_ `util.match_intervals` now supports tie-breaking for disjoint query intervals. *Brian McFee*
+
+Other changes
+
+  - `#677`_, `#705`_ added continuous integration testing for Windows. *Brian McFee*, *Ryuichi Yamamoto*
+  - `#680`_ updated display module tests to support matplotlib 2.1. *Brian McFee*
+  - `#684`_ corrected documentation for `core.stft` and `core.ifgram`. *Keunwoo Choi*
+  - `#699`_, `#701`_ corrected documentation for `filters.semitone_filterbank` and `filters.mel_frequencies`. *Vincent Lostanlen*
+  - `#704`_ eliminated unnecessary side-effects when importing `display`. *Brian McFee*
+  - `#707`_ improved test coverage for dynamic time warping. *Brian McFee*
+  - `#714`_ `util.match_intervals` matching logic has changed from raw intersection to Jaccard similarity.  *Brian McFee*
+
+
+API Changes and compatibility
+
+  - `#716`_ `core.dtw` has moved to `sequence.dtw`, and `core.fill_off_diagonal` has moved to
+    `util.fill_off_diagonal`.  *Brian McFee*
+
+.. _#716: https://github.com/librosa/librosa/pull/716
+.. _#714: https://github.com/librosa/librosa/pull/714
+.. _#713: https://github.com/librosa/librosa/pull/713
+.. _#710: https://github.com/librosa/librosa/pull/710
+.. _#708: https://github.com/librosa/librosa/pull/708
+.. _#707: https://github.com/librosa/librosa/pull/707
+.. _#705: https://github.com/librosa/librosa/pull/705
+.. _#704: https://github.com/librosa/librosa/pull/704
+.. _#701: https://github.com/librosa/librosa/pull/701
+.. _#699: https://github.com/librosa/librosa/pull/699
+.. _#688: https://github.com/librosa/librosa/pull/688
+.. _#687: https://github.com/librosa/librosa/pull/687
+.. _#684: https://github.com/librosa/librosa/pull/684
+.. _#682: https://github.com/librosa/librosa/pull/682
+.. _#680: https://github.com/librosa/librosa/pull/680
+.. _#679: https://github.com/librosa/librosa/pull/679
+.. _#677: https://github.com/librosa/librosa/pull/677
+
+v0.6.0
+------
+2018-02-17
+
+Bug fixes
+  - `#663`_ fixed alignment errors in `feature.delta`. *Brian McFee*
+  - `#646`_ `effects.trim` now correctly handles all-zeros signals. *Rimvydas Naktinis*
+  - `#634`_ `stft` now conjugates the correct half of the spectrum. *Brian McFee*
+  - `#630`_ fixed display decoration errors with `cqt_note` mode. *Brian McFee*
+  - `#619`_ `effects.split` no longer returns out-of-bound sample indices. *Brian McFee*
+  - `#616`_ Improved `util.valid_audio` to avoid integer type errors. *Brian McFee*
+  - `#600`_ CQT basis functions are now correctly centered. *Brian McFee*
+  - `#597`_ fixed frequency bin centering in `display.specshow`. *Brian McFee*
+  - `#594`_ `dtw` fixed a bug which ignored weights when `step_sizes_sigma` did not match length. *Jackie Wu*
+  - `#593`_ `stft` properly checks for valid input signals. *Erik Peterson*
+  - `#587`_ `show_versions` now shows correct module names. *Ryuichi Yamamoto*
+
+New features
+
+  - `#648`_ `feature.spectral_flatness`. *Keunwoo Choi*
+  - `#633`_ `feature.tempogram` now supports multi-band analysis. *Brian McFee*
+  - `#439`_ `core.iirt` implements the multi-rate filterbank from Chroma Toolbox. *Stefan Balke*
+  - `#435`_ `core.icqt` inverse constant-Q transform (unstable). *Brian McFee*
+
+Other changes
+  - `#674`_ Improved `write_wav` documentation with cross-references to `soundfile`. *Brian McFee*
+  - `#671`_ Warn users when phase information is lost in dB conversion. *Carl Thome*
+  - `#666`_ Expanded documentation for `load`'s resampling behavior. *Brian McFee*
+  - `#656`_ Future-proofing numpy data type checks. *Carl Thome*
+  - `#642`_ Updated unit tests for compatibility with matplotlib 2.1. *Brian McFee*
+  - `#637`_ Improved documentation for advanced I/O. *Siddhartha Kumar*
+  - `#636`_ `util.normalize` now preserves data type. *Brian McFee*
+  - `#632`_ refined the validation requirements for `util.frame`. *Brian McFee*
+  - `#628`_ all time/frequency conversion functions preserve input shape. *Brian McFee*
+  - `#625`_ Numba is now a hard dependency. *Brian McFee*
+  - `#622`_ `hz_to_midi` documentation corrections. *Carl Thome*
+  - `#621`_ `dtw` is now symmetric with respect to input arguments. *Stefan Balke*
+  - `#620`_ Updated requirements to prevent installation with (incompatible) sklearn 0.19.0. *Brian McFee*
+  - `#609`_ Improved documentation for `segment.recurrence_matrix`. *Julia Wilkins*
+  - `#598`_ Improved efficiency of `decompose.nn_filter`. *Brian McFee*
+  - `#574`_ `dtw` now supports pre-computed distance matrices. *Curtis Hawthorne*
+
+API changes and compatibility
+
+  - `#627`_ The following functions and features have been removed:
+      - `real=` parameter in `cqt`
+      - `core.logamplitude` (replaced by `amplitude_to_db`)
+      - `beat.estimate_tempo` (replaced by `beat.tempo`)
+      - `n_fft=` parameter to `feature.rmse`
+      - `ref_power=` parameter to `power_to_db`
+
+  - The following features have been deprecated, and will be removed in 0.7.0:
+      - `trim=` parameter to `feature.delta`
+
+  - `#616`_ `write_wav` no longer supports integer-typed waveforms. This is due to enforcing
+    consistency with `util.valid_audio` checks elsewhere in the codebase. If you have existing
+    code that requires integer-valued output, consider using `soundfile.write` instead.
+
+.. _#674: https://github.com/librosa/librosa/pull/674
+.. _#671: https://github.com/librosa/librosa/pull/671
+.. _#663: https://github.com/librosa/librosa/pull/663
+.. _#646: https://github.com/librosa/librosa/pull/646
+.. _#634: https://github.com/librosa/librosa/pull/634
+.. _#630: https://github.com/librosa/librosa/pull/630
+.. _#619: https://github.com/librosa/librosa/pull/619
+.. _#616: https://github.com/librosa/librosa/pull/616
+.. _#600: https://github.com/librosa/librosa/pull/600
+.. _#597: https://github.com/librosa/librosa/pull/597
+.. _#594: https://github.com/librosa/librosa/pull/594
+.. _#593: https://github.com/librosa/librosa/pull/593
+.. _#587: https://github.com/librosa/librosa/pull/587
+.. _#648: https://github.com/librosa/librosa/pull/648
+.. _#633: https://github.com/librosa/librosa/pull/633
+.. _#439: https://github.com/librosa/librosa/pull/439
+.. _#435: https://github.com/librosa/librosa/pull/435
+.. _#666: https://github.com/librosa/librosa/pull/666
+.. _#656: https://github.com/librosa/librosa/pull/656
+.. _#642: https://github.com/librosa/librosa/pull/642
+.. _#637: https://github.com/librosa/librosa/pull/637
+.. _#636: https://github.com/librosa/librosa/pull/636
+.. _#632: https://github.com/librosa/librosa/pull/632
+.. _#628: https://github.com/librosa/librosa/pull/628
+.. _#625: https://github.com/librosa/librosa/pull/625
+.. _#622: https://github.com/librosa/librosa/pull/622
+.. _#621: https://github.com/librosa/librosa/pull/621
+.. _#620: https://github.com/librosa/librosa/pull/620
+.. _#609: https://github.com/librosa/librosa/pull/609
+.. _#598: https://github.com/librosa/librosa/pull/598
+.. _#574: https://github.com/librosa/librosa/pull/574
+.. _#627: https://github.com/librosa/librosa/pull/627
 
 v0.5.1
 ------

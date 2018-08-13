@@ -22,11 +22,13 @@ __all__ = ['frames_to_samples', 'frames_to_time',
            'cqt_frequencies',
            'mel_frequencies',
            'tempo_frequencies',
-           'A_weighting']
+           'A_weighting',
+           'samples_like',
+           'times_like']
 
 
 def frames_to_samples(frames, hop_length=512, n_fft=None):
-    """Converts frame indices to audio sample indices
+    """Converts frame indices to audio sample indices.
 
     Parameters
     ----------
@@ -117,7 +119,7 @@ def samples_to_frames(samples, hop_length=512, n_fft=None):
 
 
 def frames_to_time(frames, sr=22050, hop_length=512, n_fft=None):
-    """Converts frame counts to time (seconds)
+    """Converts frame counts to time (seconds).
 
     Parameters
     ----------
@@ -756,7 +758,7 @@ def octs_to_hz(octs, A440=440.0):
 
 
 def fft_frequencies(sr=22050, n_fft=2048):
-    '''Alternative implementation of `np.fft.fftfreqs`
+    '''Alternative implementation of `np.fft.fftfreq`
 
     Parameters
     ----------
@@ -826,26 +828,65 @@ def cqt_frequencies(n_bins, fmin, bins_per_octave=12, tuning=0.0):
 
 
 def mel_frequencies(n_mels=128, fmin=0.0, fmax=11025.0, htk=False):
-    """Compute the center frequencies of mel bands.
+    """Compute an array of acoustic frequencies tuned to the mel scale.
+
+    The mel scale is a quasi-logarithmic function of acoustic frequency
+    designed such that perceptually similar pitch intervals (e.g. octaves)
+    appear equal in width over the full hearing range.
+
+    Because the definition of the mel scale is conditioned by a finite number
+    of subjective psychoaoustical experiments, several implementations coexist
+    in the audio signal processing literature [1]_. By default, librosa replicates
+    the behavior of the well-established MATLAB Auditory Toolbox of Slaney [2]_.
+    According to this default implementation,  the conversion from Hertz to mel is
+    linear below 1 kHz and logarithmic above 1 kHz. Another available implementation
+    replicates the Hidden Markov Toolkit [3]_ (HTK) according to the following formula:
+
+    `mel = 2595.0 * np.log10(1.0 + f / 700.0).`
+
+    The choice of implementation is determined by the `htk` keyword argument: setting
+    `htk=False` leads to the Auditory toolbox implementation, whereas setting it `htk=True`
+    leads to the HTK implementation.
+
+    .. [1] Umesh, S., Cohen, L., & Nelson, D. Fitting the mel scale.
+        In Proc. International Conference on Acoustics, Speech, and Signal Processing
+        (ICASSP), vol. 1, pp. 217-220, 1998.
+
+    .. [2] Slaney, M. Auditory Toolbox: A MATLAB Toolbox for Auditory
+        Modeling Work. Technical Report, version 2, Interval Research Corporation, 1998.
+
+    .. [3] Young, S., Evermann, G., Gales, M., Hain, T., Kershaw, D., Liu, X.,
+        Moore, G., Odell, J., Ollason, D., Povey, D., Valtchev, V., & Woodland, P.
+        The HTK book, version 3.4. Cambridge University, March 2009.
+
+
+    See Also
+    --------
+    hz_to_mel
+    mel_to_hz
+    librosa.feature.melspectrogram
+    librosa.feature.mfcc
+
 
     Parameters
     ----------
     n_mels    : int > 0 [scalar]
-        number of Mel bins
+        Number of mel bins.
 
     fmin      : float >= 0 [scalar]
-        minimum frequency (Hz)
+        Minimum frequency (Hz).
 
     fmax      : float >= 0 [scalar]
-        maximum frequency (Hz)
+        Maximum frequency (Hz).
 
     htk       : bool
-        use HTK formula instead of Slaney
+        If True, use HTK formula to convert Hz to mel.
+        Otherwise (False), use Slaney's Auditory Toolbox.
 
     Returns
     -------
     bin_frequencies : ndarray [shape=(n_mels,)]
-        vector of n_mels frequencies in Hz which are uniformly spaced on the Mel
+        Vector of n_mels frequencies in Hz which are uniformly spaced on the Mel
         axis.
 
     Examples
@@ -968,3 +1009,113 @@ def A_weighting(frequencies, min_db=-80.0):     # pylint: disable=invalid-name
         weights = np.maximum(min_db, weights)
 
     return weights
+
+
+def times_like(X, sr=22050, hop_length=512, n_fft=None, axis=-1):
+    """Return an array of time values to match the time axis from a feature matrix.
+
+    Parameters
+    ----------
+    X : np.ndarray or scalar
+        - If ndarray, X is a feature matrix, e.g. STFT, chromagram, or mel spectrogram.
+        - If scalar, X represents the number of frames.
+
+    sr : number > 0 [scalar]
+        audio sampling rate
+
+    hop_length : int > 0 [scalar]
+        number of samples between successive frames
+
+    n_fft : None or int > 0 [scalar]
+        Optional: length of the FFT window.
+        If given, time conversion will include an offset of `n_fft / 2`
+        to counteract windowing effects when using a non-centered STFT.
+
+    axis : int [scalar]
+        The axis representing the time axis of X.
+        By default, the last axis (-1) is taken.
+
+    Returns
+    -------
+    times : np.ndarray [shape=(n,)]
+        ndarray of times (in seconds) corresponding to each frame of X.
+
+    See Also
+    --------
+    samples_like : Return an array of sample indices to match the time axis from a feature matrix.
+
+    Examples
+    --------
+    Provide a feature matrix input:
+
+    >>> y, sr = librosa.load(librosa.util.example_audio_file())
+    >>> X = librosa.stft(y)
+    >>> times = librosa.times_like(X)
+    >>> times
+    array([  0.00000000e+00,   2.32199546e-02,   4.64399093e-02, ...,
+             6.13935601e+01,   6.14167800e+01,   6.14400000e+01])
+
+    Provide a scalar input:
+
+    >>> n_frames = 2647
+    >>> times = librosa.times_like(n_frames)
+    >>> times
+    array([  0.00000000e+00,   2.32199546e-02,   4.64399093e-02, ...,
+             6.13935601e+01,   6.14167800e+01,   6.14400000e+01])
+    """
+    samples = samples_like(X, hop_length=hop_length, n_fft=n_fft, axis=axis)
+    return samples_to_time(samples, sr=sr)
+
+
+def samples_like(X, hop_length=512, n_fft=None, axis=-1):
+    """Return an array of sample indices to match the time axis from a feature matrix.
+
+    Parameters
+    ----------
+    X : np.ndarray or scalar
+        - If ndarray, X is a feature matrix, e.g. STFT, chromagram, or mel spectrogram.
+        - If scalar, X represents the number of frames.
+
+    hop_length : int > 0 [scalar]
+        number of samples between successive frames
+
+    n_fft : None or int > 0 [scalar]
+        Optional: length of the FFT window.
+        If given, time conversion will include an offset of `n_fft / 2`
+        to counteract windowing effects when using a non-centered STFT.
+
+    axis : int [scalar]
+        The axis representing the time axis of X.
+        By default, the last axis (-1) is taken.
+
+    Returns
+    -------
+    samples : np.ndarray [shape=(n,)]
+        ndarray of sample indices corresponding to each frame of X.
+
+    See Also
+    --------
+    times_like : Return an array of time values to match the time axis from a feature matrix.
+
+    Examples
+    --------
+    Provide a feature matrix input:
+
+    >>> y, sr = librosa.load(librosa.util.example_audio_file())
+    >>> X = librosa.stft(y)
+    >>> samples = librosa.samples_like(X)
+    >>> samples
+    array([      0,     512,    1024, ..., 1353728, 1354240, 1354752])
+
+    Provide a scalar input:
+
+    >>> n_frames = 2647
+    >>> samples = librosa.samples_like(n_frames)
+    >>> samples
+    array([      0,     512,    1024, ..., 1353728, 1354240, 1354752])
+    """
+    if np.isscalar(X):
+        frames = np.arange(X)
+    else:
+        frames = np.arange(X.shape[axis])
+    return frames_to_samples(frames, hop_length=hop_length, n_fft=n_fft)

@@ -287,7 +287,7 @@ def pitch_shift(y, sr, n_steps, bins_per_octave=12):
     ...                                          bins_per_octave=24)
     '''
 
-    if bins_per_octave < 1 or not np.issubdtype(type(bins_per_octave), np.int):
+    if bins_per_octave < 1 or not np.issubdtype(type(bins_per_octave), np.integer):
         raise ParameterError('bins_per_octave must be a positive integer.')
 
     rate = 2.0 ** (-float(n_steps) / bins_per_octave)
@@ -374,7 +374,7 @@ def remix(y, intervals, align_zeros=True):
 
         clip[-1] = slice(interval[0], interval[1])
 
-        y_out.append(y[clip])
+        y_out.append(y[tuple(clip)])
 
     return np.concatenate(y_out, axis=-1)
 
@@ -473,17 +473,21 @@ def trim(y, top_db=60, ref=np.max, frame_length=2048, hop_length=512):
 
     nonzero = np.flatnonzero(non_silent)
 
-    # Compute the start and end positions
-    # End position goes one frame past the last non-zero
-    start = int(core.frames_to_samples(nonzero[0], hop_length))
-    end = min(y.shape[-1],
-              int(core.frames_to_samples(nonzero[-1] + 1, hop_length)))
+    if nonzero.size > 0:
+        # Compute the start and end positions
+        # End position goes one frame past the last non-zero
+        start = int(core.frames_to_samples(nonzero[0], hop_length))
+        end = min(y.shape[-1],
+                  int(core.frames_to_samples(nonzero[-1] + 1, hop_length)))
+    else:
+        # The signal only contains zeros
+        start, end = 0, 0
 
     # Build the mono/stereo index
     full_index = [slice(None)] * y.ndim
     full_index[-1] = slice(start, end)
 
-    return y[full_index], np.asarray([start, end])
+    return y[tuple(full_index)], np.asarray([start, end])
 
 
 def split(y, top_db=60, ref=np.max, frame_length=2048, hop_length=512):
