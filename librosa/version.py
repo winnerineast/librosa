@@ -5,8 +5,8 @@
 import sys
 import importlib
 
-short_version = '0.6'
-version = '0.6.2'
+short_version = '0.7'
+version = '0.7.1'
 
 
 def __get_mod_version(modname):
@@ -35,14 +35,20 @@ def show_versions():
                  'joblib',
                  'decorator',
                  'six',
-                 'resampy']
+                 'soundfile',
+                 'resampy',
+                 'numba']
 
     extra_deps = ['numpydoc',
                   'sphinx',
                   'sphinx_rtd_theme',
                   'sphinxcontrib.versioning',
+                  'sphinx-gallery',
+                  'pytest',
+                  'pytest-mpl',
+                  'pytest-cov',
                   'matplotlib',
-                  'numba']
+                  'presets']
 
     print('INSTALLED VERSIONS')
     print('------------------')
@@ -53,4 +59,3 @@ def show_versions():
     print('')
     for dep in extra_deps:
         print('{}: {}'.format(dep, __get_mod_version(dep)))
-    pass

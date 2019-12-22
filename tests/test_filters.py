@@ -22,13 +22,9 @@ import glob
 import numpy as np
 import scipy.io
 
-from nose.tools import eq_, raises
-import warnings
+import pytest
 
 import librosa
-
-warnings.resetwarnings()
-warnings.simplefilter('always')
 
 
 # -- utilities --#
@@ -52,7 +48,7 @@ def test_hz_to_mel():
 
         assert np.allclose(z, DATA['result'])
 
-    for infile in files(os.path.join('data', 'feature-hz_to_mel-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-hz_to_mel-*.mat')):
         yield (__test_to_mel, infile)
 
     pass
@@ -66,7 +62,7 @@ def test_mel_to_hz():
 
         assert np.allclose(z, DATA['result'])
 
-    for infile in files(os.path.join('data', 'feature-mel_to_hz-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-mel_to_hz-*.mat')):
         yield (__test_to_hz, infile)
 
     pass
@@ -79,7 +75,7 @@ def test_hz_to_octs():
 
         assert np.allclose(z, DATA['result'])
 
-    for infile in files(os.path.join('data', 'feature-hz_to_octs-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-hz_to_octs-*.mat')):
         yield (__test_to_octs, infile)
 
     pass
@@ -103,10 +99,10 @@ def test_melfb():
                            (0, int(DATA['nfft'][0]//2 - 1))],
                      mode='constant')
 
-        eq_(wts.shape, DATA['wts'].shape)
+        assert wts.shape == DATA['wts'].shape
         assert np.allclose(wts, DATA['wts'])
 
-    for infile in files(os.path.join('data', 'feature-melfb-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-melfb-*.mat')):
         yield (__test_default_norm, infile)
 
     def __test_with_norm(infile):
@@ -128,10 +124,10 @@ def test_melfb():
                            (0, int(DATA['nfft'][0]//2 - 1))],
                      mode='constant')
 
-        eq_(wts.shape, DATA['wts'].shape)
+        assert wts.shape == DATA['wts'].shape
         assert np.allclose(wts, DATA['wts'])
 
-    for infile in files(os.path.join('data', 'feature-melfbnorm-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-melfbnorm-*.mat')):
         yield (__test_with_norm, infile)
 
 
@@ -145,15 +141,9 @@ def test_mel_gap():
     n_mels = 128
     htk = True
 
-    warnings.resetwarnings()
-    warnings.simplefilter('always')
-    with warnings.catch_warnings(record=True) as out:
+    with pytest.warns(UserWarning, match='Empty filters'):
         librosa.filters.mel(sr, n_fft, n_mels=n_mels,
                             fmin=fmin, fmax=fmax, htk=htk)
-
-        assert len(out) > 0
-        assert out[0].category is UserWarning
-        assert 'empty filters' in str(out[0].message).lower()
 
 
 def test_chromafb():
@@ -165,10 +155,15 @@ def test_chromafb():
         if octwidth == 0:
             octwidth = None
 
+        # Convert A440 parameter to tuning parameter
+        A440 = DATA['a440'][0, 0]
+
+        tuning = DATA['nchroma'][0, 0] * (np.log2(A440) - np.log2(440.0))
+
         wts = librosa.filters.chroma(DATA['sr'][0, 0],
                                      DATA['nfft'][0, 0],
                                      DATA['nchroma'][0, 0],
-                                     A440=DATA['a440'][0, 0],
+                                     tuning=tuning,
                                      ctroct=DATA['ctroct'][0, 0],
                                      octwidth=octwidth,
                                      norm=2,
@@ -180,10 +175,10 @@ def test_chromafb():
                            (0, int(DATA['nfft'][0, 0]//2 - 1))],
                      mode='constant')
 
-        eq_(wts.shape, DATA['wts'].shape)
+        assert wts.shape == DATA['wts'].shape
         assert np.allclose(wts, DATA['wts'])
 
-    for infile in files(os.path.join('data', 'feature-chromafb-*.mat')):
+    for infile in files(os.path.join('tests', 'data', 'feature-chromafb-*.mat')):
         yield (__test, infile)
 
 
@@ -226,12 +221,12 @@ def test_constant_q():
 
         assert np.all(lengths <= F.shape[1])
 
-        eq_(len(F), n_bins)
+        assert len(F) == n_bins
 
         if not pad_fft:
             return
 
-        eq_(np.mod(np.log2(F.shape[1]), 1.0), 0.0)
+        assert np.mod(np.log2(F.shape[1]), 1.0) == 0.0
 
         # Check for vanishing negative frequencies
         F_fft = np.abs(np.fft.fft(F, axis=1))
@@ -242,22 +237,23 @@ def test_constant_q():
     sr = 11025
 
     # Try to make a cq basis too close to nyquist
-    yield (raises(librosa.ParameterError)(__test), sr, sr/2.0, 1, 12, 0, 1, True, 1)
+    tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
+    yield (tf, sr, sr/2.0, 1, 12, 0, 1, True, 1)
 
     # with negative fmin
-    yield (raises(librosa.ParameterError)(__test), sr, -60, 1, 12, 0, 1, True, 1)
+    yield (tf, sr, -60, 1, 12, 0, 1, True, 1)
 
     # with negative bins_per_octave
-    yield (raises(librosa.ParameterError)(__test), sr, 60, 1, -12, 0, 1, True, 1)
+    yield (tf, sr, 60, 1, -12, 0, 1, True, 1)
 
     # with negative bins
-    yield (raises(librosa.ParameterError)(__test), sr, 60, -1, 12, 0, 1, True, 1)
+    yield (tf, sr, 60, -1, 12, 0, 1, True, 1)
 
     # with negative filter_scale
-    yield (raises(librosa.ParameterError)(__test), sr, 60, 1, 12, 0, -1, True, 1)
+    yield (tf, sr, 60, 1, 12, 0, -1, True, 1)
 
     # with negative norm
-    yield (raises(librosa.ParameterError)(__test), sr, 60, 1, 12, 0, 1, True, -1)
+    yield (tf, sr, 60, 1, 12, 0, 1, True, -1)
 
     for fmin in [None, librosa.note_to_hz('C3')]:
         for n_bins in [12, 24]:
@@ -274,8 +270,9 @@ def test_constant_q():
 
 def test_window_bandwidth():
 
-    eq_(librosa.filters.window_bandwidth('hann'),
-        librosa.filters.window_bandwidth(scipy.signal.hann))
+    hann_bw = librosa.filters.window_bandwidth('hann')
+    hann_scipy_bw = librosa.filters.window_bandwidth(scipy.signal.hann)
+    assert hann_bw == hann_scipy_bw
 
 
 def test_window_bandwidth_dynamic():
@@ -283,10 +280,10 @@ def test_window_bandwidth_dynamic():
     # Test with a window constructor guaranteed to not exist in
     # the dictionary.
     # should behave like a box filter, which has enbw == 1
-    eq_(librosa.filters.window_bandwidth(lambda n: np.ones(n)), 1)
+    assert librosa.filters.window_bandwidth(lambda n: np.ones(n)) == 1
 
 
-@raises(ValueError)
+@pytest.mark.xfail(raises=ValueError)
 def test_window_bandwidth_missing():
     librosa.filters.window_bandwidth('made up window name')
 
@@ -351,14 +348,14 @@ def test_cq_to_chroma():
                             n_bins = n_octaves * bins_per_octave
 
                             if np.mod(bins_per_octave, n_chroma) != 0:
-                                tf = raises(librosa.ParameterError)(__test)
+                                tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                             else:
                                 tf = __test
                             yield (tf, n_bins, bins_per_octave,
                                    n_chroma, fmin, base_c, window)
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_get_window_fail():
 
     librosa.filters.get_window(None, 32)
@@ -397,23 +394,73 @@ def test_get_window_pre():
 def test_semitone_filterbank():
     # We test against Chroma Toolbox' elliptical semitone filterbank
     # load data from chroma toolbox
-    gt_fb = scipy.io.loadmat(os.path.join('data', 'filter-muliratefb-MIDI_FB_ellip_pitch_60_96_22050_Q25'),
+    gt_fb = scipy.io.loadmat(os.path.join('tests', 'data', 'filter-muliratefb-MIDI_FB_ellip_pitch_60_96_22050_Q25'),
                              squeeze_me=True)['h']
 
     # standard parameters reproduce settings from chroma toolbox
-    mut_ft, mut_srs = librosa.filters.semitone_filterbank()
+    mut_ft_ba, mut_srs_ba = librosa.filters.semitone_filterbank(flayout='ba')
+    mut_ft_sos, mut_srs_sos = librosa.filters.semitone_filterbank(flayout='sos')
 
-    for cur_filter_id in range(len(mut_ft)):
+    for cur_filter_id in range(len(mut_ft_ba)):
         cur_filter_gt = gt_fb[cur_filter_id + 23]
-        cur_filter_mut = mut_ft[cur_filter_id]
+        cur_filter_mut = mut_ft_ba[cur_filter_id]
+        cur_filter_mut_sos = scipy.signal.sos2tf(mut_ft_sos[cur_filter_id])
 
         cur_a_gt = cur_filter_gt[0]
         cur_b_gt = cur_filter_gt[1]
         cur_a_mut = cur_filter_mut[1]
         cur_b_mut = cur_filter_mut[0]
+        cur_a_mut_sos = cur_filter_mut_sos[1]
+        cur_b_mut_sos = cur_filter_mut_sos[0]
 
         # we deviate from the chroma toolboxes for pitches 94 and 95
         # (filters 70 and 71) by processing them with a higher samplerate
         if (cur_filter_id != 70) and (cur_filter_id != 71):
             assert np.allclose(cur_a_gt, cur_a_mut)
             assert np.allclose(cur_b_gt, cur_b_mut, atol=1e-4)
+
+            assert np.allclose(cur_a_gt, cur_a_mut_sos)
+            assert np.allclose(cur_b_gt, cur_b_mut_sos, atol=1e-4)
+
+
+@pytest.mark.parametrize('n', [9, 17])
+@pytest.mark.parametrize('window', ['hann', 'rect'])
+@pytest.mark.parametrize('angle', [None, np.pi/4, np.pi/6])
+@pytest.mark.parametrize('slope', [1, 2, 0.5])
+@pytest.mark.parametrize('zero_mean', [False, True])
+def test_diagonal_filter(n, window, angle, slope, zero_mean):
+
+    kernel = librosa.filters.diagonal_filter(window, n,
+                                             slope=slope,
+                                             angle=angle,
+                                             zero_mean=zero_mean)
+
+    # In the no-rotation case, check that the filter is shaped correctly
+    if angle == np.pi / 4 and not zero_mean:
+        win_unnorm = librosa.filters.get_window(window, n, fftbins=False)
+        win_unnorm /= win_unnorm.sum()
+        assert np.allclose(np.diag(kernel), win_unnorm)
+
+    # First check: zero-mean
+    if zero_mean:
+        assert np.isclose(kernel.sum(), 0)
+    else:
+        assert np.isclose(kernel.sum(), 1) and np.all(kernel >= 0)
+
+    # Now check if the angle transposes correctly
+    if angle is None:
+        # If we're using the slope API, then the transposed kernel
+        # will have slope 1/slope
+        k2 = librosa.filters.diagonal_filter(window, n,
+                                             slope=1./slope,
+                                             angle=angle,
+                                             zero_mean=zero_mean)
+    else:
+        # If we're using the angle API, then the transposed kernel
+        # will have angle pi/2 - angle
+        k2 = librosa.filters.diagonal_filter(window, n,
+                                             slope=slope,
+                                             angle=np.pi/2 - angle,
+                                             zero_mean=zero_mean)
+
+    assert np.allclose(k2, kernel.T)

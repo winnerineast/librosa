@@ -3,7 +3,7 @@
 #  unit tests for librosa.onset
 
 from __future__ import print_function
-from nose.tools import raises, eq_
+import pytest
 
 # Disable cache
 import os
@@ -18,9 +18,9 @@ import warnings
 import numpy as np
 import librosa
 
-__EXAMPLE_FILE = os.path.join('data', 'test1_22050.wav')
-warnings.resetwarnings()
-warnings.simplefilter('always')
+from test_core import srand
+
+__EXAMPLE_FILE = os.path.join('tests', 'data', 'test1_22050.wav')
 
 
 def test_onset_strength_audio():
@@ -49,7 +49,7 @@ def test_onset_strength_audio():
         if not detrend:
             assert np.all(oenv >= 0)
 
-        eq_(oenv.shape[-1], target_shape)
+        assert oenv.shape[-1] == target_shape
 
     y, sr = librosa.load(__EXAMPLE_FILE)
 
@@ -64,14 +64,14 @@ def test_onset_strength_audio():
                             for center in [False, True]:
                                 for aggregate in [None, np.mean, np.max]:
                                     if lag < 1 or max_size < 1:
-                                        tf = raises(librosa.ParameterError)(__test)
+                                        tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                                     else:
                                         tf = __test
 
                                     yield (tf, y, sr, feature, n_fft,
                                            hop_length, lag, max_size, detrend, center, aggregate)
 
-                                    tf = raises(librosa.ParameterError)(__test)
+                                    tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                                     yield (tf, None, sr, feature, n_fft,
                                            hop_length, lag, max_size, detrend, center, aggregate)
 
@@ -96,7 +96,7 @@ def test_onset_strength_spectrogram():
         if not detrend:
             assert np.all(oenv >= 0)
 
-        eq_(oenv.shape[-1], target_shape)
+        assert oenv.shape[-1] == target_shape
 
     y, sr = librosa.load(__EXAMPLE_FILE)
     S = librosa.feature.melspectrogram(y=y, sr=sr)
@@ -111,13 +111,34 @@ def test_onset_strength_spectrogram():
                         for aggregate in [None, np.mean, np.max]:
                             yield (__test, S, sr, feature, n_fft,
                                    hop_length, detrend, center)
-                            tf = raises(librosa.ParameterError)(__test)
+                            tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                             yield (tf, None, sr, feature, n_fft,
                                    hop_length, detrend, center)
 
 
-def test_onset_strength_multi():
+def test_onset_strength_multi_noagg():
 
+    y, sr = librosa.load(__EXAMPLE_FILE)
+    S = librosa.feature.melspectrogram(y=y, sr=sr)
+
+    for lag in [1, 2, 3]:
+        for max_size in [1]:
+            # We only test with max_size=1 here to make the sub-band slicing test simple
+            odf_multi = librosa.onset.onset_strength_multi(S=S,
+                                                           lag=lag, max_size=1,
+                                                           aggregate=False)
+            odf_mean  = librosa.onset.onset_strength_multi(S=S,
+                                                           lag=lag, max_size=1,
+                                                           aggregate=np.mean)
+
+            # With no aggregation, output shape should = input shape
+            assert odf_multi.shape == S.shape
+            
+            # Result should average out to the same as mean aggregation
+            assert np.allclose(odf_mean, np.mean(odf_multi, axis=0))
+
+
+def test_onset_strength_multi():
     y, sr = librosa.load(__EXAMPLE_FILE)
     S = librosa.feature.melspectrogram(y=y, sr=sr)
 
@@ -130,13 +151,14 @@ def test_onset_strength_multi():
                                                            lag=lag, max_size=1,
                                                            channels=channels)
 
-            eq_(len(odf_multi), len(channels) - 1)
+            assert len(odf_multi) == len(channels) - 1
 
             for i, (s, t) in enumerate(zip(channels, channels[1:])):
                 odf_single = librosa.onset.onset_strength(S=S[s:t],
                                                           lag=lag,
                                                           max_size=1)
                 assert np.allclose(odf_single, odf_multi[i])
+
 
 
 def test_onset_detect_real():
@@ -159,7 +181,7 @@ def test_onset_detect_real():
     y, sr = librosa.load(__EXAMPLE_FILE)
 
     # Test with no signal
-    yield raises(librosa.ParameterError)(__test), None, sr, None, 512, False
+    yield pytest.mark.xfail(__test, raises=librosa.ParameterError), None, sr, None, 512, False
 
     for hop_length in [64, 512, 2048]:
         oenv = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
@@ -175,7 +197,7 @@ def test_onset_detect_const():
         onsets = librosa.onset.onset_detect(y=y, sr=sr, onset_envelope=oenv,
                                             hop_length=hop_length)
 
-        eq_(len(onsets), 0)
+        assert len(onsets) == 0
 
     sr = 22050
     duration = 3.0
@@ -216,7 +238,7 @@ def test_onset_units():
         for hop_length in [512, 1024]:
             for units in ['frames', 'time', 'samples']:
                 yield __test, units, hop_length, y, sr
-            yield raises(librosa.ParameterError)(__test), 'bad units', hop_length, y, sr
+            yield pytest.mark.xfail(__test, raises=librosa.ParameterError), 'bad units', hop_length, y, sr
 
 
 def test_onset_backtrack():
@@ -239,5 +261,36 @@ def test_onset_backtrack():
         assert np.all(energy[onsets_bt] <= energy[np.maximum(0, onsets_bt - 1)])
 
     yield __test, oenv
-    rmse = librosa.feature.rmse(y=y)
-    yield __test, rmse
+    rms = librosa.feature.rms(y=y)
+    yield __test, rms
+
+
+@pytest.mark.xfail(raises=librosa.ParameterError)
+def test_onset_strength_noagg():
+    S = np.zeros((3,3))
+    librosa.onset.onset_strength(S=S, aggregate=False)
+
+
+@pytest.mark.xfail(raises=librosa.ParameterError)
+def test_onset_strength_badref():
+    S = np.zeros((3, 3))
+    librosa.onset.onset_strength(S=S, ref=S[:, :2])
+
+
+def test_onset_strength_multi_ref():
+    srand()
+
+    # Make a random positive spectrum
+    S = 1 + np.abs(np.random.randn(1025, 10))
+
+    # Test with a null reference
+    null_ref = np.zeros_like(S)
+
+    onsets = librosa.onset.onset_strength_multi(S=S,
+                                                ref=null_ref,
+                                                aggregate=False,
+                                                center=False)
+
+    # since the reference is zero everywhere, S - ref = S
+    # past the setup phase (first frame)
+    assert np.allclose(onsets[:, 1:], S[:, 1:])

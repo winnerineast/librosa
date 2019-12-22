@@ -3,15 +3,19 @@
 '''Time and frequency utilities'''
 
 import re
+import warnings
 
 import numpy as np
 import six
 
 from ..util.exceptions import ParameterError
+from ..util.deprecation import Deprecated
 
 __all__ = ['frames_to_samples', 'frames_to_time',
            'samples_to_frames', 'samples_to_time',
            'time_to_samples', 'time_to_frames',
+           'blocks_to_samples', 'blocks_to_frames',
+           'blocks_to_time',
            'note_to_hz', 'note_to_midi',
            'midi_to_hz', 'midi_to_note',
            'hz_to_note', 'hz_to_midi',
@@ -22,6 +26,7 @@ __all__ = ['frames_to_samples', 'frames_to_time',
            'cqt_frequencies',
            'mel_frequencies',
            'tempo_frequencies',
+           'fourier_tempo_frequencies',
            'A_weighting',
            'samples_like',
            'times_like']
@@ -254,7 +259,7 @@ def samples_to_time(samples, sr=22050):
 
     Returns
     -------
-    times : np.ndarray [shape=samples.shape, dtype=int]
+    times : np.ndarray [shape=samples.shape]
         Time values corresponding to `samples` (in seconds)
 
     See Also
@@ -277,6 +282,136 @@ def samples_to_time(samples, sr=22050):
     '''
 
     return np.asanyarray(samples) / float(sr)
+
+
+def blocks_to_frames(blocks, block_length):
+    '''Convert block indices to frame indices
+
+    Parameters
+    ----------
+    blocks : np.ndarray
+        Block index or array of block indices
+
+    block_length : int > 0
+        The number of frames per block
+
+    Returns
+    -------
+    frames : np.ndarray [shape=samples.shape, dtype=int]
+        The index or indices of frames corresponding to the beginning
+        of each provided block.
+
+    See Also
+    --------
+    blocks_to_samples
+    blocks_to_time
+
+    Examples
+    --------
+    Get frame indices for each block in a stream
+
+    >>> filename = librosa.util.example_audio_file()
+    >>> sr = librosa.get_samplerate(filename)
+    >>> stream = librosa.stream(filename, block_length=16, 
+    ...                         frame_length=2048, hop_length=512)
+    >>> for n, y in enumerate(stream):
+    ...     n_frame = librosa.blocks_to_frames(n, block_length=16)
+
+    '''
+    return block_length * np.asanyarray(blocks)
+
+
+def blocks_to_samples(blocks, block_length, hop_length):
+    '''Convert block indices to sample indices
+
+    Parameters
+    ----------
+    blocks : np.ndarray
+        Block index or array of block indices
+
+    block_length : int > 0
+        The number of frames per block
+
+    hop_length : int > 0
+        The number of samples to advance between frames
+
+    Returns
+    -------
+    samples : np.ndarray [shape=samples.shape, dtype=int]
+        The index or indices of samples corresponding to the beginning
+        of each provided block.
+
+        Note that these correspond to the *first* sample index in
+        each block, and are not frame-centered.
+
+    See Also
+    --------
+    blocks_to_frames
+    blocks_to_time
+
+    Examples
+    --------
+    Get sample indices for each block in a stream
+
+    >>> filename = librosa.util.example_audio_file()
+    >>> sr = librosa.get_samplerate(filename)
+    >>> stream = librosa.stream(filename, block_length=16, 
+    ...                         frame_length=2048, hop_length=512)
+    >>> for n, y in enumerate(stream):
+    ...     n_sample = librosa.blocks_to_samples(n, block_length=16,
+    ...                                          hop_length=512)
+
+    '''
+    frames = blocks_to_frames(blocks, block_length)
+    return frames_to_samples(frames, hop_length=hop_length)
+
+
+def blocks_to_time(blocks, block_length, hop_length, sr):
+    '''Convert block indices to time (in seconds)
+
+    Parameters
+    ----------
+    blocks : np.ndarray
+        Block index or array of block indices
+
+    block_length : int > 0
+        The number of frames per block
+
+    hop_length : int > 0
+        The number of samples to advance between frames
+
+    sr : int > 0
+        The sampling rate (samples per second)
+
+    Returns
+    -------
+    times : np.ndarray [shape=samples.shape]
+        The time index or indices (in seconds) corresponding to the 
+        beginning of each provided block.
+
+        Note that these correspond to the time of the *first* sample 
+        in each block, and are not frame-centered.
+
+    See Also
+    --------
+    blocks_to_frames
+    blocks_to_samples
+
+    Examples
+    --------
+    Get time indices for each block in a stream
+
+    >>> filename = librosa.util.example_audio_file()
+    >>> sr = librosa.get_samplerate(filename)
+    >>> stream = librosa.stream(filename, block_length=16, 
+    ...                         frame_length=2048, hop_length=512)
+    >>> for n, y in enumerate(stream):
+    ...     n_time = librosa.blocks_to_time(n, block_length=16,
+    ...                                     hop_length=512, sr=sr)
+
+    '''
+    samples = blocks_to_samples(blocks, block_length, hop_length)
+    return samples_to_time(samples, sr=sr)
 
 
 def note_to_hz(note, **kwargs):
@@ -697,7 +832,7 @@ def mel_to_hz(mels, htk=False):
     return freqs
 
 
-def hz_to_octs(frequencies, A440=440.0):
+def hz_to_octs(frequencies, tuning=0.0, bins_per_octave=12, A440=Deprecated()):
     """Convert frequencies (Hz) to (fractional) octave numbers.
 
     Examples
@@ -711,8 +846,18 @@ def hz_to_octs(frequencies, A440=440.0):
     ----------
     frequencies   : number >0 or np.ndarray [shape=(n,)] or float
         scalar or vector of frequencies
-    A440          : float
+
+    tuning        : float
+        Tuning deviation from A440 in (fractional) bins per octave.
+
+    bins_per_octave : int > 0
+        Number of bins per octave.
+
+    A440          : float <DEPRECATED>
         frequency of A440 (in Hz)
+
+        .. note:: This parameter is deprecated in 0.7.1 and will be removed
+                  in version 0.8.0.  Use `tuning=` instead.
 
     Returns
     -------
@@ -723,10 +868,18 @@ def hz_to_octs(frequencies, A440=440.0):
     --------
     octs_to_hz
     """
+
+    if isinstance(A440, Deprecated):
+        A440 = 440.0 * 2.0**(tuning / bins_per_octave)
+    else:
+        warnings.warn('Parameter A440={} in hz_to_octs is deprecated in 0.7.1. '
+                      'It will be removed in 0.8.0. '
+                      'Use tuning= instead.'.format(A440), DeprecationWarning)
+
     return np.log2(np.asanyarray(frequencies) / (float(A440) / 16))
 
 
-def octs_to_hz(octs, A440=440.0):
+def octs_to_hz(octs, tuning=0.0, bins_per_octave=12, A440=Deprecated()):
     """Convert octaves numbers to frequencies.
 
     Octaves are counted relative to A.
@@ -742,7 +895,14 @@ def octs_to_hz(octs, A440=440.0):
     ----------
     octaves       : np.ndarray [shape=(n,)] or float
         octave number for each frequency
-    A440          : float
+
+    tuning : float
+        Tuning deviation from A440 in (fractional) bins per octave.
+
+    bins_per_octave : int > 0
+        Number of bins per octave.
+
+    A440          : float <DEPRECATED>
         frequency of A440
 
     Returns
@@ -754,6 +914,13 @@ def octs_to_hz(octs, A440=440.0):
     --------
     hz_to_octs
     """
+    if isinstance(A440, Deprecated):
+        A440 = 440.0 * 2.0**(tuning / bins_per_octave)
+    else:
+        warnings.warn('Parameter A440={} in octs_to_hz is deprecated in 0.7.1. '
+                      'It will be removed in 0.8.0. '
+                      'Use tuning= instead.'.format(A440), DeprecationWarning)
+
     return (float(A440) / 16)*(2.0**np.asanyarray(octs))
 
 
@@ -812,8 +979,8 @@ def cqt_frequencies(n_bins, fmin, bins_per_octave=12, tuning=0.0):
     bins_per_octave : int > 0 [scalar]
         Number of bins per octave
 
-    tuning : float in `[-0.5, +0.5)`
-        Deviation from A440 tuning in fractional bins (cents)
+    tuning : float
+        Deviation from A440 tuning in fractional bins
 
     Returns
     -------
@@ -915,7 +1082,7 @@ def mel_frequencies(n_mels=128, fmin=0.0, fmax=11025.0, htk=False):
 
 
 def tempo_frequencies(n_bins, hop_length=512, sr=22050):
-    '''Compute the frequencies (in beats-per-minute) corresponding
+    '''Compute the frequencies (in beats per minute) corresponding
     to an onset auto-correlation or tempogram matrix.
 
     Parameters
@@ -953,6 +1120,40 @@ def tempo_frequencies(n_bins, hop_length=512, sr=22050):
     return bin_frequencies
 
 
+def fourier_tempo_frequencies(sr=22050, win_length=384, hop_length=512):
+    '''Compute the frequencies (in beats per minute) corresponding
+    to a Fourier tempogram matrix.
+
+    Parameters
+    ----------
+    sr : number > 0
+        The audio sampling rate
+
+    win_length : int > 0
+        The number of frames per analysis window
+
+    hop_length : int > 0
+        The number of samples between each bin
+
+    Returns
+    -------
+    bin_frequencies : ndarray [shape=(win_length // 2 + 1 ,)]
+        vector of bin frequencies measured in BPM.
+
+    Examples
+    --------
+    Get the tempo frequencies corresponding to a 384-bin (8-second) tempogram
+
+    >>> librosa.fourier_tempo_frequencies(384)
+    array([ 0.   ,  0.117,  0.234, ..., 22.266, 22.383, 22.5  ])
+
+    '''
+
+    # sr / hop_length gets the frame rate
+    # multiplying by 60 turns frames / sec into frames / minute
+    return fft_frequencies(sr=sr * 60 / float(hop_length), n_fft=win_length)
+
+
 # A-weighting should be capitalized: suppress the naming warning
 def A_weighting(frequencies, min_db=-80.0):     # pylint: disable=invalid-name
     '''Compute the A-weighting of a set of frequencies.
@@ -988,6 +1189,7 @@ def A_weighting(frequencies, min_db=-80.0):     # pylint: disable=invalid-name
     >>> plt.xlabel('Frequency (Hz)')
     >>> plt.ylabel('Weighting (log10)')
     >>> plt.title('A-Weighting of CQT frequencies')
+    >>> plt.show()
 
     '''
 

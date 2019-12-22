@@ -5,7 +5,7 @@ from __future__ import print_function
 import warnings
 import numpy as np
 
-from nose.tools import raises, eq_
+import pytest
 
 import librosa
 
@@ -18,45 +18,55 @@ try:
 except KeyError:
     pass
 
-__EXAMPLE_FILE = os.path.join('data', 'test1_22050.wav')
+__EXAMPLE_FILE = os.path.join('tests', 'data', 'test1_22050.wav')
 warnings.resetwarnings()
 warnings.simplefilter('always')
+warnings.filterwarnings('module', '.*', FutureWarning, 'scipy.*')
 
 
 # utils submodule
-def test_delta():
+@pytest.mark.parametrize('slope', np.linspace(-2, 2, num=6))
+@pytest.mark.parametrize('xin', [np.vstack([np.arange(100.0)] * 3)])
+@pytest.mark.parametrize('order', [1, pytest.mark.xfail(0)])
+@pytest.mark.parametrize('width, axis', [pytest.mark.xfail((-1, 0)),
+                                         pytest.mark.xfail((-1, 1)),
+                                         pytest.mark.xfail((0, 0)),
+                                         pytest.mark.xfail((0, 1)),
+                                         pytest.mark.xfail((1, 0)),
+                                         pytest.mark.xfail((1, 1)),
+                                         pytest.mark.xfail((2, 0)),
+                                         pytest.mark.xfail((2, 1)),
+                                         (3, 0), (3, 1),
+                                         pytest.mark.xfail((4, 0)),
+                                         pytest.mark.xfail((4, 1)),
+                                         (5, 1), pytest.mark.xfail((5, 0)),
+                                         pytest.mark.xfail((6, 0)),
+                                         pytest.mark.xfail((6, 1)),
+                                         pytest.mark.xfail((7, 0)), (7, 1)])
+@pytest.mark.parametrize('bias', [-10, 0, 10])
+def test_delta(xin, width, slope, order, axis, bias):
+
+    x = slope * xin + bias
+
     # Note: this test currently only checks first-order differences
+#    if width < 3 or np.mod(width, 2) != 1 or width > x.shape[axis]:
+#        pytest.raises(librosa.ParameterError)
 
-    def __test(width, order, axis, x):
-        delta   = librosa.feature.delta(x,
-                                        width=width,
-                                        order=order,
-                                        axis=axis)
+    delta   = librosa.feature.delta(x,
+                                    width=width,
+                                    order=order,
+                                    axis=axis)
 
-        # Check that trimming matches the expected shape
-        eq_(x.shape, delta.shape)
+    # Check that trimming matches the expected shape
+    assert x.shape == delta.shape
 
-        # Once we're sufficiently far into the signal (ie beyond half_len)
-        # (x + delta)[t] should approximate x[t+1] if x is actually linear
-        slice_orig = [slice(None)] * x.ndim
-        slice_out = [slice(None)] * delta.ndim
-        slice_orig[axis] = slice(width//2 + 1, -width//2 + 1)
-        slice_out[axis] = slice(width//2, -width//2)
-        assert np.allclose((x + delta)[tuple(slice_out)], x[tuple(slice_orig)])
-
-    x = np.vstack([np.arange(100.0)] * 3)
-
-    for width in range(-1, 8):
-        for slope in np.linspace(-2, 2, num=6):
-            for bias in [-10, 0, 10]:
-                for order in [0, 1]:
-                    for axis in range(x.ndim):
-                        tf = __test
-                        if width < 3 or np.mod(width, 2) != 1 or width > x.shape[axis]:
-                            tf = raises(librosa.ParameterError)(__test)
-                        if order != 1:
-                            tf = raises(librosa.ParameterError)(__test)
-                        yield tf, width, order, axis, slope * x + bias
+    # Once we're sufficiently far into the signal (ie beyond half_len)
+    # (x + delta)[t] should approximate x[t+1] if x is actually linear
+    slice_orig = [slice(None)] * x.ndim
+    slice_out = [slice(None)] * delta.ndim
+    slice_orig[axis] = slice(width//2 + 1, -width//2 + 1)
+    slice_out[axis] = slice(width//2, -width//2)
+    assert np.allclose((x + delta)[tuple(slice_out)], x[tuple(slice_orig)])
 
 
 def test_stack_memory():
@@ -72,8 +82,8 @@ def test_stack_memory():
 
         d, t = data.shape
 
-        eq_(data_stack.shape[0], n_steps * d)
-        eq_(data_stack.shape[1], t)
+        assert data_stack.shape[0] == n_steps * d
+        assert data_stack.shape[1] == t
 
         assert np.allclose(data_stack[0], data[0])
 
@@ -95,9 +105,9 @@ def test_stack_memory():
             for delay in [-4, -2, -1, 0, 1, 2, 4]:
                 tf = __test
                 if n_steps < 1:
-                    tf = raises(librosa.ParameterError)(__test)
+                    tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                 if delay == 0:
-                    tf = raises(librosa.ParameterError)(__test)
+                    tf = pytest.mark.xfail(__test, raises=librosa.ParameterError)
                 yield tf, n_steps, delay, data
 
 
@@ -138,7 +148,7 @@ def test_spectral_centroid_synthetic():
 
 def test_spectral_centroid_errors():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(S):
         librosa.feature.spectral_centroid(S=S)
 
@@ -234,7 +244,7 @@ def test_spectral_bandwidth_onecol():
 
 def test_spectral_bandwidth_errors():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(S):
         librosa.feature.spectral_bandwidth(S=S)
 
@@ -280,7 +290,7 @@ def test_spectral_rolloff_synthetic():
 
 def test_spectral_rolloff_errors():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(S, p):
         librosa.feature.spectral_rolloff(S=S, roll_percent=p)
 
@@ -310,7 +320,7 @@ def test_spectral_contrast_log():
 
 def test_spectral_contrast_errors():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(S, freq, fmin, n_bands, quantile):
         librosa.feature.spectral_contrast(S=S,
                                           freq=freq,
@@ -377,7 +387,7 @@ def test_spectral_flatness_synthetic():
 
 def test_spectral_flatness_errors():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(S, amin):
         librosa.feature.spectral_flatness(S=S,
                                           amin=amin)
@@ -391,15 +401,15 @@ def test_spectral_flatness_errors():
     yield __test, S, -1
 
 
-def test_rmse():
+def test_rms():
 
     def __test(n):
         S = np.ones((n, 5))
 
         # RMSE of an all-ones band is 1
-        rmse = librosa.feature.rmse(S=S)
+        rms = librosa.feature.rms(S=S)
 
-        assert np.allclose(rmse, np.ones_like(rmse))
+        assert np.allclose(rms, np.ones_like(rms) / np.sqrt(2 * (n - 1)), atol=1e-2)
 
     def __test_consistency(frame_length, hop_length, center):
         y, sr = librosa.load(__EXAMPLE_FILE, sr=None)
@@ -416,18 +426,15 @@ def test_rmse():
                                           center=center))[0]
 
         # Try both RMS methods.
-        rms1 = librosa.feature.rmse(S=S, frame_length=frame_length,
-                                    hop_length=hop_length)
-        rms2 = librosa.feature.rmse(y=y, frame_length=frame_length,
-                                    hop_length=hop_length, center=center)
+        rms1 = librosa.feature.rms(S=S, frame_length=frame_length,
+                                   hop_length=hop_length)
+        rms2 = librosa.feature.rms(y=y, frame_length=frame_length,
+                                   hop_length=hop_length, center=center)
 
         assert rms1.shape == rms2.shape
-        # Normalize envelopes.
-        rms1 /= rms1.max()
-        rms2 /= rms2.max()
 
         # Ensure results are similar.
-        np.testing.assert_allclose(rms1, rms2, rtol=5e-2)
+        np.testing.assert_allclose(rms1, rms2, atol=5e-4)
 
     for frame_length in [2048, 4096]:
         for hop_length in [128, 512, 1024]:
@@ -513,8 +520,8 @@ def test_poly_features_synthetic():
 
 def test_tonnetz():
     y, sr = librosa.load(librosa.util.example_audio_file())
-    tonnetz_chroma = np.load(os.path.join("data", "feature-tonnetz-chroma.npy"))
-    tonnetz_msaf = np.load(os.path.join("data", "feature-tonnetz-msaf.npy"))
+    tonnetz_chroma = np.load(os.path.join('tests', "data", "feature-tonnetz-chroma.npy"))
+    tonnetz_msaf = np.load(os.path.join('tests', "data", "feature-tonnetz-msaf.npy"))
 
     # Use cqt chroma
     def __audio():
@@ -538,15 +545,14 @@ def test_tonnetz():
         # skip the equivalence check
 
     # Call the function with not enough parameters
-    yield (raises(librosa.ParameterError)(librosa.feature.tonnetz))
+    yield pytest.mark.xfail(librosa.feature.tonnetz, raises=librosa.ParameterError)
     yield __audio
     yield __stft
     yield __cqt
 
 
 def test_tempogram_fail():
-
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(y, sr, onset_envelope, hop_length, win_length, center, window, norm):
 
         librosa.feature.tempogram(y=y,
@@ -576,7 +582,6 @@ def test_tempogram_fail():
 
 
 def test_tempogram_audio():
-
     def __test(y, sr, oenv, hop_length):
 
         # Get the tempogram from audio
@@ -614,7 +619,6 @@ def test_tempogram_audio():
 
 
 def test_tempogram_odf():
-
     sr = 22050
     hop_length = 512
     duration = 8
@@ -655,9 +659,9 @@ def test_tempogram_odf():
                                               norm=norm)
 
         # Check the shape of the output
-        eq_(tempogram.shape[0], win_length)
+        assert tempogram.shape[0] == win_length
 
-        eq_(tempogram.shape[1], len(odf))
+        assert tempogram.shape[1] == len(odf)
 
         # Mean over time to wash over the boundary padding effects
         idx = np.where(librosa.util.localmax(tempogram.max(axis=1)))[0]
@@ -713,9 +717,106 @@ def test_tempogram_odf_multi():
                     yield __test, center, win_length, window, norm
 
 
+def test_fourier_tempogram_fail():
+    @pytest.mark.xfail(raises=librosa.ParameterError)
+    def __test(y, sr, onset_envelope, hop_length, win_length, center, window):
+
+        librosa.feature.fourier_tempogram(y=y,
+                                          sr=sr,
+                                          onset_envelope=onset_envelope,
+                                          hop_length=hop_length,
+                                          win_length=win_length,
+                                          center=center,
+                                          window=window)
+
+    sr = 22050
+    hop_length = 512
+    duration = 10
+
+    y = np.zeros(duration * sr)
+
+    # Fail when no input is provided
+    yield __test, None, sr, None, hop_length, 384, True, 'hann'
+
+    # Fail when win_length is too small
+    for win_length in [-384, -1, 0]:
+        yield __test, y, sr, None, hop_length, win_length, True, 'hann'
+
+    # Fail when len(window) != win_length
+    yield __test, y, sr, None, hop_length, 384, True, np.ones(win_length + 1)
+
+
+def test_fourier_tempogram_audio():
+    def __test(y, sr, oenv, hop_length):
+
+        # Get the tempogram from audio
+        t1 = librosa.feature.fourier_tempogram(y=y, sr=sr,
+                                               onset_envelope=None,
+                                               hop_length=hop_length)
+
+        # Get the tempogram from oenv
+        t2 = librosa.feature.fourier_tempogram(y=None, sr=sr,
+                                               onset_envelope=oenv,
+                                               hop_length=hop_length)
+
+        # Make sure it works when both are provided
+        t3 = librosa.feature.fourier_tempogram(y=y, sr=sr,
+                                               onset_envelope=oenv,
+                                               hop_length=hop_length)
+
+        # And that oenv overrides y
+        t4 = librosa.feature.fourier_tempogram(y=0 * y, sr=sr,
+                                               onset_envelope=oenv,
+                                               hop_length=hop_length)
+
+        assert np.iscomplexobj(t1)
+        assert np.allclose(t1, t2)
+        assert np.allclose(t1, t3)
+        assert np.allclose(t1, t4)
+
+    y, sr = librosa.load(__EXAMPLE_FILE)
+
+    for hop_length in [512, 1024]:
+        oenv = librosa.onset.onset_strength(y=y,
+                                            sr=sr,
+                                            hop_length=hop_length)
+
+        yield __test, y, sr, oenv, hop_length
+
+
+@pytest.mark.parametrize('sr', [22050])
+@pytest.mark.parametrize('hop_length', [512])
+@pytest.mark.parametrize('win_length', [192, 384])
+@pytest.mark.parametrize('center', [False, True])
+@pytest.mark.parametrize('window', ['hann', np.ones])
+def test_fourier_tempogram_invert(sr, hop_length, win_length, center, window):
+    duration = 16
+    tempo = 100
+
+    odf = np.zeros(duration * sr // hop_length, dtype=np.float32)
+    spacing = sr * 60. // (hop_length * tempo)
+    odf[::int(spacing)] = 1
+
+    tempogram = librosa.feature.fourier_tempogram(onset_envelope=odf,
+                                                  sr=sr,
+                                                  hop_length=hop_length,
+                                                  win_length=win_length,
+                                                  window=window,
+                                                  center=center)
+
+    if center:
+        sl = slice(None)
+    else:
+        sl = slice(win_length//2, - win_length//2)
+
+    odf_inv = librosa.istft(tempogram, hop_length=1, center=center, window=window,
+                            length=len(odf))
+    assert np.allclose(odf_inv[sl], odf[sl], atol=1e-6)
+
+
 def test_cens():
     # load CQT data from Chroma Toolbox
-    ct_cqt = load(os.path.join('data', 'features-CT-cqt.mat'))
+    ct_cqt = load(os.path.join('tests', 'data', 'features-CT-cqt.mat'))
 
     fn_ct_chroma_cens = ['features-CT-CENS_9-2.mat',
                          'features-CT-CENS_21-5.mat',
@@ -739,7 +840,7 @@ def test_cens():
         lr_chroma_cens = lr_chroma_cens[:, ::downsample_smooth]
 
         # load CENS-41-1 features
-        ct_chroma_cens = load(os.path.join('data', cur_fn_ct_chroma_cens))
+        ct_chroma_cens = load(os.path.join('tests', 'data', cur_fn_ct_chroma_cens))
 
         maxdev = np.abs(ct_chroma_cens['f_CENS'] - lr_chroma_cens)
         assert np.allclose(ct_chroma_cens['f_CENS'], lr_chroma_cens, rtol=1e-15, atol=1e-15), maxdev
@@ -747,26 +848,118 @@ def test_cens():
 
 def test_mfcc():
 
-    def __test(dct_type, norm, n_mfcc, S):
+    def __test(dct_type, norm, n_mfcc, lifter, S):
 
         E_total = np.sum(S, axis=0)
 
-        mfcc = librosa.feature.mfcc(S=S, dct_type=dct_type, norm=norm, n_mfcc=n_mfcc)
+        mfcc = librosa.feature.mfcc(S=S, dct_type=dct_type, norm=norm,
+                                    n_mfcc=n_mfcc, lifter=lifter)
 
         assert mfcc.shape[0] == n_mfcc
         assert mfcc.shape[1] == S.shape[1]
 
         # In type-2 mode, DC component should be constant over all frames
         if dct_type == 2:
-            assert np.var(mfcc[0] / E_total) <= 1e-30
+            assert np.var(mfcc[0] / E_total) <= 1e-29
 
     S = librosa.power_to_db(np.random.randn(128, 100)**2, ref=np.max)
 
-    for n_mfcc in [13, 20]:
-        for dct_type in [1, 2, 3]:
-            for norm in [None, 'ortho']:
-                if dct_type == 1 and norm == 'ortho':
-                    tf = raises(NotImplementedError)(__test)
-                else:
-                    tf = __test
-                yield tf, dct_type, norm, n_mfcc, S
+    for dct_type in [1, 2, 3]:
+        for norm in [None, 'ortho']:
+            if dct_type == 1 and norm == 'ortho':
+                tf = pytest.mark.xfail(__test, raises=NotImplementedError)
+            else:
+                tf = __test
+            for n_mfcc in [13, 20]:
+                for lifter in [0, n_mfcc]:
+                    yield tf, dct_type, norm, n_mfcc, lifter, S
+
+
+@pytest.mark.xfail(raises=librosa.ParameterError)
+@pytest.mark.parametrize('lifter', [-1, np.nan])
+def test_mfcc_badlifter(lifter):
+    S = np.random.randn(128, 100)**2
+    librosa.feature.mfcc(S=S, lifter=lifter)
+
+
+# -- feature inversion tests
+@pytest.mark.parametrize('power', [1, 2])
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+@pytest.mark.parametrize('n_fft', [1024, 2048])
+def test_mel_to_stft(power, dtype, n_fft):
+    srand()
+
+    # Make a random mel spectrum, 4 frames
+    mel_basis = librosa.filters.mel(22050, n_fft, n_mels=128, dtype=dtype)
+
+    stft_orig = np.random.randn(n_fft//2 + 1, 4) ** power
+    mels = mel_basis.dot(stft_orig.astype(dtype))
+
+    stft = librosa.feature.inverse.mel_to_stft(mels, power=power, n_fft=n_fft)
+
+    # Check precision
+    assert stft.dtype == dtype
+
+    # Check for non-negative spectrum
+    assert np.all(stft >= 0)
+
+    # Check that the shape is good
+    assert stft.shape[0] == n_fft //2 + 1
+
+    # Check that the approximation is good in RMSE terms
+    assert np.sqrt(np.mean((mel_basis.dot(stft**power) - mels)**2)) <= 5e-2
+
+
+def test_mel_to_audio():
+    y = librosa.tone(440.0, sr=22050, duration=1)
+
+    M = librosa.feature.melspectrogram(y=y, sr=22050)
+
+    y_inv = librosa.feature.inverse.mel_to_audio(M, sr=22050, length=len(y))
+
+    # Sanity check the length
+    assert len(y) == len(y_inv)
+
+    # And that it's valid audio
+    assert librosa.util.valid_audio(y_inv)
+
+
+@pytest.mark.parametrize('n_mfcc', [13, 20])
+@pytest.mark.parametrize('n_mels', [64, 128])
+@pytest.mark.parametrize('dct_type', [2, 3])
+def test_mfcc_to_mel(n_mfcc, n_mels, dct_type):
+    y = librosa.tone(440.0, sr=22050, duration=1)
+
+    mfcc = librosa.feature.mfcc(y=y, sr=22050,
+                                n_mels=n_mels, n_mfcc=n_mfcc, dct_type=dct_type)
+
+    melspec = librosa.feature.melspectrogram(y=y, sr=22050, n_mels=n_mels)
+    
+    mel_recover = librosa.feature.inverse.mfcc_to_mel(mfcc, n_mels=n_mels,
+                                                      dct_type=dct_type)
+
+    # Quick shape check
+    assert melspec.shape == mel_recover.shape
+
+    # Check non-negativity
+    assert np.all(mel_recover >= 0)
+
+
+@pytest.mark.parametrize('n_mfcc', [13, 20])
+@pytest.mark.parametrize('n_mels', [64, 128])
+@pytest.mark.parametrize('dct_type', [2, 3])
+def test_mfcc_to_audio(n_mfcc, n_mels, dct_type):
+    y = librosa.tone(440.0, sr=22050, duration=1)
+
+    mfcc = librosa.feature.mfcc(y=y, sr=22050,
+                                n_mels=n_mels, n_mfcc=n_mfcc, dct_type=dct_type)
+
+    y_inv = librosa.feature.inverse.mfcc_to_audio(mfcc, n_mels=n_mels,
+                                                  dct_type=dct_type,
+                                                  length=len(y))
+
+    # Sanity check the length
+    assert len(y) == len(y_inv)
+
+    # And that it's valid audio
+    assert librosa.util.valid_audio(y_inv)

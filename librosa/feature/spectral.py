@@ -24,7 +24,7 @@ __all__ = ['spectral_centroid',
            'spectral_rolloff',
            'spectral_flatness',
            'poly_features',
-           'rmse',
+           'rms',
            'zero_crossing_rate',
            'chroma_stft',
            'chroma_cqt',
@@ -36,12 +36,24 @@ __all__ = ['spectral_centroid',
 
 # -- Spectral features -- #
 def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
-                      freq=None):
+                      freq=None, win_length=None, window='hann', center=True,
+                      pad_mode='reflect'):
     '''Compute the spectral centroid.
 
     Each frame of a magnitude spectrogram is normalized and treated as a
     distribution over frequency bins, from which the mean (centroid) is
     extracted per frame.
+
+    More precisely, the centroid at frame `t` is defined as [1]_:
+
+        ``centroid[t] = sum_k S[k, t] * freq[k] / (sum_j S[j, t])``
+
+    where `S` is a magnitude spectrogram, and `freq` is the array of
+    frequencies (e.g., FFT frequencies in Hz) of the rows of `S`.
+
+    .. [1] Klapuri, A., & Davy, M. (Eds.). (2007). Signal processing
+        methods for music transcription, chapter 5. 
+        Springer Science & Business Media.
 
     Parameters
     ----------
@@ -66,6 +78,31 @@ def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
         Otherwise, it can be a single array of `d` center frequencies,
         or a matrix of center frequencies as constructed by
         `librosa.core.ifgram`
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
+
 
     Returns
     -------
@@ -117,9 +154,12 @@ def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     ...                          y_axis='log', x_axis='time')
     >>> plt.title('log Power spectrogram')
     >>> plt.tight_layout()
+    >>> plt.show()
     '''
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     if not np.isrealobj(S):
         raise ParameterError('Spectral centroid is only defined '
@@ -141,10 +181,17 @@ def spectral_centroid(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
 
 def spectral_bandwidth(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
+                       win_length=None, window='hann', center=True, pad_mode='reflect',
                        freq=None, centroid=None, norm=True, p=2):
-    '''Compute p'th-order spectral bandwidth:
+    '''Compute p'th-order spectral bandwidth.
 
-        (sum_k S[k] * (freq[k] - centroid)**p)**(1/p)
+       The spectral bandwidth [1]_ at frame `t` is computed by
+
+        (sum_k S[k, t] * (freq[k, t] - centroid[t])**p)**(1/p)
+
+    .. [1] Klapuri, A., & Davy, M. (Eds.). (2007). Signal processing
+        methods for music transcription, chapter 5.
+        Springer Science & Business Media.
 
     Parameters
     ----------
@@ -162,6 +209,30 @@ def spectral_bandwidth(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
     hop_length : int > 0 [scalar]
         hop length for STFT. See `librosa.core.stft` for details.
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     freq : None or np.ndarray [shape=(d,) or shape=(d, t)]
         Center frequencies for spectrogram bins.
@@ -222,10 +293,13 @@ def spectral_bandwidth(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     ...                          y_axis='log', x_axis='time')
     >>> plt.title('log Power spectrogram')
     >>> plt.tight_layout()
+    >>> plt.show()
 
     '''
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     if not np.isrealobj(S):
         raise ParameterError('Spectral bandwidth is only defined '
@@ -257,9 +331,17 @@ def spectral_bandwidth(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
 
 def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
+                      win_length=None, window='hann', center=True, pad_mode='reflect',
                       freq=None, fmin=200.0, n_bands=6, quantile=0.02,
                       linear=False):
     '''Compute spectral contrast [1]_
+
+    Each frame of a spectrogram `S` is divided into sub-bands.
+    For each sub-band, the energy contrast is estimated by comparing
+    the mean energy in the top quantile (peak energy) to that of the 
+    bottom quantile (valley energy).  High contrast values generally
+    correspond to clear, narrow-band signals, while low contrast values
+    correspond to broad-band noise.
 
     .. [1] Jiang, Dan-Ning, Lie Lu, Hong-Jiang Zhang, Jian-Hua Tao,
            and Lian-Hong Cai.
@@ -284,6 +366,30 @@ def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
     hop_length : int > 0 [scalar]
         hop length for STFT. See `librosa.core.stft` for details.
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     freq : None or np.ndarray [shape=(d,)]
         Center frequencies for spectrogram bins.
@@ -335,9 +441,12 @@ def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     >>> plt.ylabel('Frequency bands')
     >>> plt.title('Spectral contrast')
     >>> plt.tight_layout()
+    >>> plt.show()
     '''
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     # Compute the center frequencies of each bin
     if freq is None:
@@ -400,6 +509,7 @@ def spectral_contrast(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
 
 def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
+                     win_length=None, window='hann', center=True, pad_mode='reflect',
                      freq=None, roll_percent=0.85):
     '''Compute roll-off frequency.
 
@@ -425,6 +535,30 @@ def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
     hop_length : int > 0 [scalar]
         hop length for STFT. See `librosa.core.stft` for details.
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     freq : None or np.ndarray [shape=(d,) or shape=(d, t)]
         Center frequencies for spectrogram bins.
@@ -482,13 +616,16 @@ def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     ...                          y_axis='log', x_axis='time')
     >>> plt.title('log Power spectrogram')
     >>> plt.tight_layout()
+    >>> plt.show()
 
     '''
 
     if not 0.0 < roll_percent < 1.0:
         raise ParameterError('roll_percent must lie in the range (0, 1)')
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     if not np.isrealobj(S):
         raise ParameterError('Spectral rolloff is only defined '
@@ -515,6 +652,7 @@ def spectral_rolloff(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
 
 def spectral_flatness(y=None, S=None, n_fft=2048, hop_length=512,
+                      win_length=None, window='hann', center=True, pad_mode='reflect',
                       amin=1e-10, power=2.0):
     '''Compute spectral flatness
 
@@ -541,6 +679,30 @@ def spectral_flatness(y=None, S=None, n_fft=2048, hop_length=512,
 
     hop_length : int > 0 [scalar]
         hop length for STFT. See `librosa.core.stft` for details.
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     amin : float > 0 [scalar]
         minimum threshold for `S` (=added noise floor for numerical stability)
@@ -587,7 +749,8 @@ def spectral_flatness(y=None, S=None, n_fft=2048, hop_length=512,
         raise ParameterError('amin must be strictly positive')
 
     S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
-                            power=1.)
+                            power=1., win_length=win_length, window=window,
+                            center=center, pad_mode=pad_mode)
 
     if not np.isrealobj(S):
         raise ParameterError('Spectral flatness is only defined '
@@ -602,13 +765,13 @@ def spectral_flatness(y=None, S=None, n_fft=2048, hop_length=512,
     return gmean / amean
 
 
-def rmse(y=None, S=None, frame_length=2048, hop_length=512,
-         center=True, pad_mode='reflect'):
-    '''Compute root-mean-square (RMS) energy for each frame, either from the
+def rms(y=None, S=None, frame_length=2048, hop_length=512,
+        center=True, pad_mode='reflect'):
+    '''Compute root-mean-square (RMS) value for each frame, either from the
     audio samples `y` or from a spectrogram `S`.
 
-    Computing the energy from audio samples is faster as it doesn't require a
-    STFT calculation. However, using a spectrogram will give a more accurate
+    Computing the RMS value from audio samples is faster as it doesn't require
+    a STFT calculation. However, using a spectrogram will give a more accurate
     representation of energy over time because its frames can be windowed,
     thus prefer using `S` if it's already available.
 
@@ -646,13 +809,13 @@ def rmse(y=None, S=None, frame_length=2048, hop_length=512,
     Examples
     --------
     >>> y, sr = librosa.load(librosa.util.example_audio_file())
-    >>> librosa.feature.rmse(y=y)
+    >>> librosa.feature.rms(y=y)
     array([[ 0.   ,  0.056, ...,  0.   ,  0.   ]], dtype=float32)
 
     Or from spectrogram input
 
     >>> S, phase = librosa.magphase(librosa.stft(y))
-    >>> rms = librosa.feature.rmse(S=S)
+    >>> rms = librosa.feature.rms(S=S)
 
     >>> import matplotlib.pyplot as plt
     >>> plt.figure()
@@ -660,7 +823,7 @@ def rmse(y=None, S=None, frame_length=2048, hop_length=512,
     >>> plt.semilogy(rms.T, label='RMS Energy')
     >>> plt.xticks([])
     >>> plt.xlim([0, rms.shape[-1]])
-    >>> plt.legend(loc='best')
+    >>> plt.legend()
     >>> plt.subplot(2, 1, 2)
     >>> librosa.display.specshow(librosa.amplitude_to_db(S, ref=np.max),
     ...                          y_axis='log', x_axis='time')
@@ -668,10 +831,11 @@ def rmse(y=None, S=None, frame_length=2048, hop_length=512,
     >>> plt.tight_layout()
 
     Use a STFT window of constant ones and no frame centering to get consistent
-    results with the RMS energy computed from the audio samples `y`
+    results with the RMS computed from the audio samples `y`
 
     >>> S = librosa.magphase(librosa.stft(y, window=np.ones, center=False))[0]
-    >>> librosa.feature.rmse(S=S)
+    >>> librosa.feature.rms(S=S)
+    >>> plt.show()
 
     '''
     if y is not None and S is not None:
@@ -684,16 +848,24 @@ def rmse(y=None, S=None, frame_length=2048, hop_length=512,
         x = util.frame(y,
                        frame_length=frame_length,
                        hop_length=hop_length)
+
+        # No normalization is necessary for time-domain input
+        norm = 1
     elif S is not None:
         x, _ = _spectrogram(y=y, S=S,
                             n_fft=frame_length,
                             hop_length=hop_length)
+
+        # FFT introduces a scaling of n_fft to energy calculations
+        norm = 2 * (x.shape[0] - 1)
     else:
         raise ValueError('Either `y` or `S` must be input.')
-    return np.sqrt(np.mean(np.abs(x)**2, axis=0, keepdims=True))
+
+    return np.sqrt(np.mean(np.abs(x)**2, axis=0, keepdims=True) / norm)
 
 
 def poly_features(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
+                  win_length=None, window='hann', center=True, pad_mode='reflect',
                   order=1, freq=None):
     '''Get coefficients of fitting an nth-order polynomial to the columns
     of a spectrogram.
@@ -714,6 +886,30 @@ def poly_features(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
     hop_length : int > 0 [scalar]
         hop length for STFT. See `librosa.core.stft` for details.
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     order : int > 0
         order of the polynomial to fit
@@ -777,9 +973,12 @@ def poly_features(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     >>> librosa.display.specshow(librosa.amplitude_to_db(S, ref=np.max),
     ...                          y_axis='log')
     >>> plt.tight_layout()
+    >>> plt.show()
     '''
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     # Compute the center frequencies of each bin
     if freq is None:
@@ -859,7 +1058,9 @@ def zero_crossing_rate(y, frame_length=2048, hop_length=512, center=True,
 
 # -- Chroma --#
 def chroma_stft(y=None, sr=22050, S=None, norm=np.inf, n_fft=2048,
-                hop_length=512, tuning=None, **kwargs):
+                hop_length=512, win_length=None, window='hann', center=True,
+                pad_mode='reflect', tuning=None, n_chroma=12,
+                **kwargs):
     """Compute a chromagram from a waveform or power spectrogram.
 
     This implementation is derived from `chromagram_E` [1]_
@@ -891,9 +1092,36 @@ def chroma_stft(y=None, sr=22050, S=None, norm=np.inf, n_fft=2048,
     hop_length : int > 0 [scalar]
         hop length if provided `y, sr` instead of `S`
 
-    tuning : float in `[-0.5, 0.5)` [scalar] or None.
-        Deviation from A440 tuning in fractional bins (cents).
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
+
+    tuning : float [scalar] or None.
+        Deviation from A440 tuning in fractional chroma bins.
         If `None`, it is automatically estimated.
+
+    n_chroma : int > 0 [scalar]
+        Number of chroma bins to produce (12 by default).
 
     kwargs : additional keyword arguments
         Arguments to parameterize chroma filters.
@@ -901,7 +1129,7 @@ def chroma_stft(y=None, sr=22050, S=None, norm=np.inf, n_fft=2048,
 
     Returns
     -------
-    chromagram  : np.ndarray [shape=(n_chroma, t)]
+    chromagram : np.ndarray [shape=(n_chroma, t)]
         Normalized energy for each chroma bin at each frame.
 
     See Also
@@ -949,22 +1177,19 @@ def chroma_stft(y=None, sr=22050, S=None, norm=np.inf, n_fft=2048,
     >>> plt.colorbar()
     >>> plt.title('Chromagram')
     >>> plt.tight_layout()
+    >>> plt.show()
 
     """
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
-                            power=2)
-
-    n_chroma = kwargs.get('n_chroma', 12)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length, power=2,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     if tuning is None:
         tuning = estimate_tuning(S=S, sr=sr, bins_per_octave=n_chroma)
 
     # Get the filter bank
-    if 'A440' not in kwargs:
-        kwargs['A440'] = 440.0 * 2.0**(float(tuning) / n_chroma)
-
-    chromafb = filters.chroma(sr, n_fft, **kwargs)
+    chromafb = filters.chroma(sr, n_fft, tuning=tuning, n_chroma=n_chroma, **kwargs)
 
     # Compute raw chroma
     raw_chroma = np.dot(chromafb, S)
@@ -1004,7 +1229,7 @@ def chroma_cqt(y=None, sr=22050, C=None, hop_length=512, fmin=None,
         threshold are discarded, resulting in a sparse chromagram.
 
     tuning : float
-        Deviation (in cents) from A440 tuning
+        Deviation (in fractions of a CQT bin) from A440 tuning
 
     n_chroma : int > 0
         Number of chroma bins to produce
@@ -1056,6 +1281,7 @@ def chroma_cqt(y=None, sr=22050, C=None, hop_length=512, fmin=None,
     >>> plt.title('chroma_cqt')
     >>> plt.colorbar()
     >>> plt.tight_layout()
+    >>> plt.show()
 
     '''
 
@@ -1094,11 +1320,20 @@ def chroma_cqt(y=None, sr=22050, C=None, hop_length=512, fmin=None,
 def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
                 tuning=None, n_chroma=12,
                 n_octaves=7, bins_per_octave=None, cqt_mode='full', window=None,
-                norm=2, win_len_smooth=41):
+                norm=2, win_len_smooth=41, smoothing_window='hann'):
     r'''Computes the chroma variant "Chroma Energy Normalized" (CENS), following [1]_.
 
+    To compute CENS features, following steps are taken after obtaining chroma vectors using `chroma_cqt`:
+    1. L-1 normalization of each chroma vector
+    2. Quantization of amplitude based on "log-like" amplitude thresholds
+    3. (optional) Smoothing with sliding window. Default window length = 41 frames
+    4. (not implemented) Downsampling
+
+    CENS features are robust to dynamics, timbre and articulation, thus these are commonly used in audio
+    matching and retrieval applications.
+
     .. [1] Meinard Müller and Sebastian Ewert
-           Chroma Toolbox: MATLAB implementations for extracting variants of chroma-based audio features
+           "Chroma Toolbox: MATLAB implementations for extracting variants of chroma-based audio features"
            In Proceedings of the International Conference on Music Information Retrieval (ISMIR), 2011.
 
     Parameters
@@ -1123,7 +1358,7 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
         Column-wise normalization of the chromagram.
 
     tuning : float
-        Deviation (in cents) from A440 tuning
+        Deviation (in fractions of a CQT bin) from A440 tuning
 
     n_chroma : int > 0
         Number of chroma bins to produce
@@ -1141,9 +1376,13 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
     cqt_mode : ['full', 'hybrid']
         Constant-Q transform mode
 
-    win_len_smooth : int > 0
-        Length of temporal smoothing window.
+    win_len_smooth : int > 0 or None
+        Length of temporal smoothing window. `None` disables temporal smoothing.
         Default: 41
+
+    smoothing_window : str, float or tuple
+        Type of window function for temporal smoothing. See `filters.get_window` for possible inputs.
+        Default: 'hann'
 
     Returns
     -------
@@ -1157,6 +1396,9 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
 
     chroma_stft
         Compute a chromagram from an STFT spectrogram or waveform.
+
+    filters.get_window
+        Compute a window function.
 
     Examples
     --------
@@ -1179,7 +1421,11 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
     >>> plt.title('chroma_cens')
     >>> plt.colorbar()
     >>> plt.tight_layout()
+    >>> plt.show()
     '''
+    if not ((win_len_smooth is None) or (isinstance(win_len_smooth, int) and win_len_smooth > 0)):
+        raise ParameterError('win_len_smooth={} must be a positive integer or None'.format(win_len_smooth))
+
     chroma = chroma_cqt(y=y, C=C, sr=sr,
                         hop_length=hop_length,
                         fmin=fmin,
@@ -1203,13 +1449,16 @@ def chroma_cens(y=None, sr=22050, C=None, hop_length=512, fmin=None,
     for cur_quant_step_idx, cur_quant_step in enumerate(QUANT_STEPS):
         chroma_quant += (chroma > cur_quant_step) * QUANT_WEIGHTS[cur_quant_step_idx]
 
-    # Apply temporal smoothing
-    win = filters.get_window('hann', win_len_smooth + 2, fftbins=False)
-    win /= np.sum(win)
-    win = np.atleast_2d(win)
+    if win_len_smooth:
+        # Apply temporal smoothing
+        win = filters.get_window(smoothing_window, win_len_smooth + 2, fftbins=False)
+        win /= np.sum(win)
+        win = np.atleast_2d(win)
 
-    cens = scipy.signal.convolve2d(chroma_quant, win,
-                                   mode='same', boundary='fill')
+        cens = scipy.signal.convolve2d(chroma_quant, win,
+                                       mode='same', boundary='fill')
+    else:
+        cens = chroma_quant
 
     # L2-Normalization
     return util.normalize(cens, norm=norm, axis=0)
@@ -1285,6 +1534,7 @@ def tonnetz(y=None, sr=22050, chroma=None):
     >>> plt.colorbar()
     >>> plt.title('Chroma')
     >>> plt.tight_layout()
+    >>> plt.show()
 
     '''
 
@@ -1318,18 +1568,18 @@ def tonnetz(y=None, sr=22050, chroma=None):
 
 
 # -- Mel spectrogram and MFCCs -- #
-def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs):
+def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', lifter=0, **kwargs):
     """Mel-frequency cepstral coefficients (MFCCs)
 
     Parameters
     ----------
-    y     : np.ndarray [shape=(n,)] or None
+    y : np.ndarray [shape=(n,)] or None
         audio time series
 
-    sr    : number > 0 [scalar]
+    sr : number > 0 [scalar]
         sampling rate of `y`
 
-    S     : np.ndarray [shape=(d, t)] or None
+    S : np.ndarray [shape=(d, t)] or None
         log-power Mel spectrogram
 
     n_mfcc: int > 0 [scalar]
@@ -1345,13 +1595,21 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs
 
         Normalization is not supported for `dct_type=1`.
 
+    lifter : number >= 0
+        If `lifter>0`, apply *liftering* (cepstral filtering) to the MFCCs:
+
+        `M[n, :] <- M[n, :] * (1 + sin(pi * (n + 1) / lifter)) * lifter / 2`
+
+        Setting `lifter >= 2 * n_mfcc` emphasizes the higher-order coefficients.
+        As `lifter` increases, the coefficient weighting becomes approximately linear.
+
     kwargs : additional keyword arguments
         Arguments to `melspectrogram`, if operating
         on time series input
 
     Returns
     -------
-    M     : np.ndarray [shape=(n_mfcc, t)]
+    M : np.ndarray [shape=(n_mfcc, t)]
         MFCC sequence
 
     See Also
@@ -1370,6 +1628,23 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs
            ...,
            [  1.066e-14,  -7.500e+00, ...,   1.421e-14,   1.421e-14],
            [  3.109e-14,  -5.058e+00, ...,   2.931e-14,   2.931e-14]])
+
+    Using a different hop length and HTK-style Mel frequencies
+
+    >>> librosa.feature.mfcc(y=y, sr=sr, hop_length=1024, htk=True)
+    array([[-1.628e+02, -8.903e+01, -1.409e+02, ..., -1.078e+02,
+        -2.504e+02, -2.393e+02],
+       [ 1.275e+02,  9.532e+01,  1.019e+02, ...,  1.152e+02,
+         2.224e+02,  1.750e+02],
+       [ 1.139e+01,  6.155e+00,  1.266e+01, ...,  4.557e+01,
+         4.585e+01,  3.985e+01],
+       ...,
+       [ 3.462e+00,  4.032e+00, -5.694e-01, ..., -6.677e+00,
+        -1.183e-01,  1.485e+00],
+       [ 9.569e-01,  1.069e+00, -6.865e+00, ..., -9.598e+00,
+        -1.611e+00, -6.716e+00],
+       [ 8.457e+00,  3.582e+00, -1.156e-01, ..., -3.018e+00,
+        -1.456e+01, -6.991e+00]], dtype=float32)
 
     Use a pre-computed log-power Mel spectrogram
 
@@ -1394,6 +1669,7 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs
     >>> plt.colorbar()
     >>> plt.title('MFCC')
     >>> plt.tight_layout()
+    >>> plt.show()
 
     Compare different DCT bases
 
@@ -1409,15 +1685,25 @@ def mfcc(y=None, sr=22050, S=None, n_mfcc=20, dct_type=2, norm='ortho', **kwargs
     >>> plt.title('HTK-style (dct_type=3)')
     >>> plt.colorbar()
     >>> plt.tight_layout()
+    >>> plt.show()
     """
 
     if S is None:
         S = power_to_db(melspectrogram(y=y, sr=sr, **kwargs))
 
-    return scipy.fftpack.dct(S, axis=0, type=dct_type, norm=norm)[:n_mfcc]
+    M = scipy.fftpack.dct(S, axis=0, type=dct_type, norm=norm)[:n_mfcc]
+
+    if lifter > 0:
+        M *= 1 + (lifter / 2) * np.sin(np.pi * np.arange(1, 1 + n_mfcc, dtype=M.dtype) / lifter)[:, np.newaxis]
+        return M
+    elif lifter == 0:
+        return M
+    else:
+        raise ParameterError('MFCC lifter={} must be a non-negative number'.format(lifter))
 
 
 def melspectrogram(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
+                   win_length=None, window='hann', center=True, pad_mode='reflect',
                    power=2.0, **kwargs):
     """Compute a mel-scaled spectrogram.
 
@@ -1445,6 +1731,30 @@ def melspectrogram(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
     hop_length : int > 0 [scalar]
         number of samples between successive frames.
         See `librosa.core.stft`
+
+    win_length : int <= n_fft [scalar]
+        Each frame of audio is windowed by `window()`.
+        The window will be of length `win_length` and then padded
+        with zeros to match `n_fft`.
+
+        If unspecified, defaults to ``win_length = n_fft``.
+
+    window : string, tuple, number, function, or np.ndarray [shape=(n_fft,)]
+        - a window specification (string, tuple, or number);
+          see `scipy.signal.get_window`
+        - a window function, such as `scipy.signal.hanning`
+        - a vector or array of length `n_fft`
+
+        .. see also:: `filters.get_window`
+
+    center : boolean
+        - If `True`, the signal `y` is padded so that frame
+          `t` is centered at `y[t * hop_length]`.
+        - If `False`, then frame `t` begins at `y[t * hop_length]`
+
+    pad_mode : string
+        If `center=True`, the padding mode to use at the edges of the signal.
+        By default, STFT uses reflection padding.
 
     power : float > 0 [scalar]
         Exponent for the magnitude melspectrogram.
@@ -1478,10 +1788,13 @@ def melspectrogram(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
            [  3.668e-09,   2.029e-08, ...,   3.208e-09,   2.864e-09],
            [  2.561e-10,   2.096e-09, ...,   7.543e-10,   6.101e-10]])
 
-    Using a pre-computed power spectrogram
+    Using a pre-computed power spectrogram would give the same result:
 
     >>> D = np.abs(librosa.stft(y))**2
-    >>> S = librosa.feature.melspectrogram(S=D)
+    >>> S = librosa.feature.melspectrogram(S=D, sr=sr)
+    
+    Display of mel-frequency spectrogram coefficients, with custom
+    arguments for mel filterbank construction (default is fmax=sr/2):
 
     >>> # Passing through arguments to the Mel filters
     >>> S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128,
@@ -1489,19 +1802,19 @@ def melspectrogram(y=None, sr=22050, S=None, n_fft=2048, hop_length=512,
 
     >>> import matplotlib.pyplot as plt
     >>> plt.figure(figsize=(10, 4))
-    >>> librosa.display.specshow(librosa.power_to_db(S,
-    ...                                              ref=np.max),
-    ...                          y_axis='mel', fmax=8000,
-    ...                          x_axis='time')
+    >>> S_dB = librosa.power_to_db(S, ref=np.max)
+    >>> librosa.display.specshow(S_dB, x_axis='time',
+    ...                          y_axis='mel', sr=sr,
+    ...                          fmax=8000)
     >>> plt.colorbar(format='%+2.0f dB')
-    >>> plt.title('Mel spectrogram')
+    >>> plt.title('Mel-frequency spectrogram')
     >>> plt.tight_layout()
-
-
+    >>> plt.show()
     """
 
-    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length,
-                            power=power)
+    S, n_fft = _spectrogram(y=y, S=S, n_fft=n_fft, hop_length=hop_length, power=power,
+                            win_length=win_length, window=window, center=center,
+                            pad_mode=pad_mode)
 
     # Build a Mel filter
     mel_basis = filters.mel(sr, n_fft, **kwargs)

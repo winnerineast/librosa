@@ -10,14 +10,12 @@ try:
 except KeyError:
     pass
 
-from nose.tools import raises, eq_
+import pytest
 
 import librosa
 import numpy as np
 
-__EXAMPLE_FILE = os.path.join('data', 'test1_22050.wav')
-warnings.resetwarnings()
-warnings.simplefilter('always')
+__EXAMPLE_FILE = os.path.join('tests', 'data', 'test1_22050.wav')
 
 
 def test_time_stretch():
@@ -34,10 +32,10 @@ def test_time_stretch():
                            rtol=1e-2, atol=1e-3)
 
     for rate in [0.25, 0.5, 1.0, 2.0, 4.0]:
-        yield __test, os.path.join('data', 'test1_22050.wav'), rate
+        yield __test, os.path.join('tests', 'data', 'test1_22050.wav'), rate
 
     for rate in [-1, 0]:
-        yield raises(librosa.ParameterError)(__test), os.path.join('data', 'test1_22050.wav'), rate
+        yield pytest.mark.xfail(__test, raises=librosa.ParameterError), os.path.join('tests', 'data', 'test1_22050.wav'), rate
 
 
 def test_pitch_shift():
@@ -51,14 +49,14 @@ def test_pitch_shift():
         new_duration = librosa.get_duration(ys, sr=sr)
 
         # We don't have to be too precise here, since this goes through an STFT
-        eq_(orig_duration, new_duration)
+        assert orig_duration == new_duration
 
     for n_steps in np.linspace(-1.5, 1.5, 5):
         for bins_per_octave in [12, 24]:
-            yield __test, os.path.join('data', 'test1_22050.wav'), n_steps, bins_per_octave
+            yield __test, os.path.join('tests', 'data', 'test1_22050.wav'), n_steps, bins_per_octave
 
     for bins_per_octave in [-1, 0]:
-        yield (raises(librosa.ParameterError)(__test), os.path.join('data', 'test1_22050.wav'),
+        yield (pytest.mark.xfail(__test, raises=librosa.ParameterError), os.path.join('tests', 'data', 'test1_22050.wav'),
                1, bins_per_octave)
 
 
@@ -114,15 +112,15 @@ def test_hpss():
     # Make sure that the residual energy is generally small
     y_residual = y - y_harm - y_perc
 
-    rms_orig = librosa.feature.rmse(y=y)
-    rms_res = librosa.feature.rmse(y=y_residual)
+    rms_orig = librosa.feature.rms(y=y)
+    rms_res = librosa.feature.rms(y=y_residual)
 
     assert np.percentile(rms_orig, 0.01) > np.percentile(rms_res, 0.99)
 
 
 def test_percussive():
 
-    y, sr = librosa.load(os.path.join('data', 'test1_22050.wav'))
+    y, sr = librosa.load(os.path.join('tests', 'data', 'test1_22050.wav'))
 
     yh1, yp1 = librosa.effects.hpss(y)
 
@@ -133,7 +131,7 @@ def test_percussive():
 
 def test_harmonic():
 
-    y, sr = librosa.load(os.path.join('data', 'test1_22050.wav'))
+    y, sr = librosa.load(os.path.join('tests', 'data', 'test1_22050.wav'))
 
     yh1, yp1 = librosa.effects.hpss(y)
 
@@ -154,12 +152,12 @@ def test_trim():
         assert np.allclose(yt, y[tuple(fidx)])
 
         # Verify logamp
-        rms = librosa.feature.rmse(y=librosa.to_mono(yt), center=False)
+        rms = librosa.feature.rms(y=librosa.to_mono(yt), center=False)
         logamp = librosa.power_to_db(rms**2, ref=ref, top_db=None)
         assert np.all(logamp > - top_db)
 
         # Verify logamp
-        rms_all = librosa.feature.rmse(y=librosa.to_mono(y)).squeeze()
+        rms_all = librosa.feature.rms(y=librosa.to_mono(y)).squeeze()
         logamp_all = librosa.power_to_db(rms_all**2, ref=ref,
                                          top_db=None)
 
@@ -263,3 +261,35 @@ def test_split():
         for hop_length in [256, 512, 1024]:
             for top_db in [20, 60, 80]:
                 yield __test, hop_length, frame_length, top_db
+
+
+@pytest.mark.parametrize('coef', [0.5, 0.99])
+@pytest.mark.parametrize('zi', [None, [0]])
+@pytest.mark.parametrize('return_zf', [False, True])
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+def test_preemphasis(coef, zi, return_zf, dtype):
+    x = np.arange(10, dtype=dtype)
+
+    y = librosa.effects.preemphasis(x, coef=coef, zi=zi, return_zf=return_zf)
+
+    if return_zf:
+        y, zf = y
+
+    assert np.allclose(y[1:], x[1:] - coef * x[:-1])
+    assert x.dtype == y.dtype
+
+
+@pytest.mark.parametrize('dtype', [np.float32, np.float64])
+def test_preemphasis_continue(dtype):
+
+    # Compare pre-emphasis computed in parts to that of the whole sequence in one go
+    x = np.arange(64, dtype=dtype)
+
+    y1, zf1 = librosa.effects.preemphasis(x[:32], return_zf=True)
+    y2, zf2 = librosa.effects.preemphasis(x[32:], return_zf=True, zi=zf1)
+
+    y_all, zf_all = librosa.effects.preemphasis(x, return_zf=True)
+
+    assert np.allclose(y_all, np.concatenate([y1, y2]))
+    assert np.allclose(zf2, zf_all)
+    assert x.dtype == y_all.dtype

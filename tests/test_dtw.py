@@ -5,15 +5,11 @@ import librosa
 import numpy as np
 from scipy.spatial.distance import cdist
 
-from nose.tools import raises
+import pytest
 from test_core import srand
 
-import warnings
-warnings.resetwarnings()
-warnings.simplefilter('always')
 
-
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_1d_input():
     X = np.array([[1], [3], [3], [8], [1]])
     Y = np.array([[2], [0], [0], [8], [7], [2]])
@@ -53,7 +49,8 @@ def test_dtw_global_constrained():
                      [np.inf, np.inf, 13., 7., 8., 14.],
                      [np.inf, np.inf, np.inf, 14., 13., 9.]])
 
-    mut_D = librosa.sequence.dtw(X, Y, backtrack=False, global_constraints=True, band_rad=0.5)
+    mut_D = librosa.sequence.dtw(X, Y, backtrack=False,
+                                 global_constraints=True, band_rad=0.5)
     assert np.array_equal(gt_D, mut_D)
 
 
@@ -79,32 +76,57 @@ def test_dtw_global_supplied_distance_matrix():
     assert np.array_equal(gt_D, mut_D)
 
 
-@raises(librosa.ParameterError)
+def test_dtw_gobal_boundary():
+    # Verify that boundary condition is fulfilled for subseq=False.
+    # See https://github.com/librosa/librosa/pull/920
+    X = np.array([1, 2, 3, 4, 5])
+    Y = np.array([1, 1, 1, 2, 4, 5, 6, 5, 5])
+    gt_wp = np.array([[0, 0], [0, 1], [0, 2], [1, 3], [2, 3], [3, 4], [4, 5],
+                      [4, 6], [4, 7], [4, 8]])
+
+    D, wp = librosa.sequence.dtw(X, Y, subseq=False)
+    wp = wp[::-1]
+    assert np.array_equal(gt_wp, wp)
+
+
+def test_dtw_subseq_boundary():
+    # Verify that boundary condition doesn't have to be fulfilled for
+    # subseq=True.
+    # See https://github.com/librosa/librosa/pull/920
+    X = np.array([1, 2, 3, 4, 5])
+    Y = np.array([1, 1, 1, 2, 4, 5, 6, 5, 5])
+    gt_wp = np.array([[0, 2], [1, 3], [2, 3], [3, 4], [4, 5]])
+
+    D, wp = librosa.sequence.dtw(X, Y, subseq=True)
+    wp = wp[::-1]
+    assert np.array_equal(gt_wp, wp)
+
+
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_dtw_incompatible_args_01():
     librosa.sequence.dtw(C=1, X=1, Y=1)
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_dtw_incompatible_args_02():
     librosa.sequence.dtw(C=None, X=None, Y=None)
 
 
-
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_dtw_incompatible_sigma_add():
     X = np.array([[1, 3, 3, 8, 1]])
     Y = np.array([[2, 0, 0, 8, 7, 2]])
     librosa.sequence.dtw(X=X, Y=Y, weights_add=np.arange(10))
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_dtw_incompatible_sigma_mul():
     X = np.array([[1, 3, 3, 8, 1]])
     Y = np.array([[2, 0, 0, 8, 7, 2]])
     librosa.sequence.dtw(X=X, Y=Y, weights_mul=np.arange(10))
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_dtw_incompatible_sigma_diag():
     X = np.array([[1, 3, 3, 8, 1, 2]])
     Y = np.array([[2, 0, 0, 8, 7]])
@@ -119,8 +141,8 @@ def test_dtw_global_diagonal():
     gt_wp = list(zip(list(range(10)), list(range(10))))[::-1]
 
     mut_D, mut_wp = librosa.sequence.dtw(X, Y, subseq=True, metric='cosine',
-                                step_sizes_sigma=np.array([[1, 1]]),
-                                weights_mul=np.array([1, ]))
+                                         step_sizes_sigma=np.array([[1, 1]]),
+                                         weights_mul=np.array([1, ]))
 
     assert np.array_equal(np.asarray(gt_wp), np.asarray(mut_wp))
 
@@ -142,6 +164,18 @@ def test_dtw_subseq():
     # note the +1 due to python indexing
     mut_X = Y[mut_wp[-1][1]:mut_wp[0][1] + 1]
     assert np.array_equal(X, mut_X)
+
+
+def test_dtw_subseq_supplied_distance_matrix():
+    X = np.array([[0], [1], [2]])
+    Y = np.array([[1], [2], [3], [4]])
+    C = cdist(X, Y)
+
+    costs0, path0 = librosa.sequence.dtw(X.T, Y.T, subseq=True)
+    costs1, path1 = librosa.sequence.dtw(C=C, subseq=True)
+
+    assert np.array_equal(costs0, costs1)
+    assert np.array_equal(path0, path1)
 
 
 def test_dtw_subseq_sym():

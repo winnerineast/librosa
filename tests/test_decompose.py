@@ -16,12 +16,9 @@ import scipy.sparse
 import librosa
 import sklearn.decomposition
 
-from nose.tools import raises
+import pytest
 
 from test_core import srand
-
-warnings.resetwarnings()
-warnings.simplefilter('always')
 
 
 def test_default_decompose():
@@ -63,7 +60,7 @@ def test_decompose_fit():
     assert np.allclose(W, W2)
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_decompose_fit_false():
 
     X = np.array([[1, 2, 3, 4, 5, 6], [1, 1, 1.2, 1, 0.8, 1]])
@@ -82,7 +79,7 @@ def test_sorted_decompose():
 def test_real_hpss():
 
     # Load an audio signal
-    y, sr = librosa.load(os.path.join('data', 'test1_22050.wav'))
+    y, sr = librosa.load(os.path.join('tests', 'data', 'test1_22050.wav'))
 
     D = np.abs(librosa.stft(y))
 
@@ -108,9 +105,9 @@ def test_real_hpss():
                     yield __hpss_test, window, power, mask, margin
 
 
-@raises(librosa.ParameterError)
+@pytest.mark.xfail(raises=librosa.ParameterError)
 def test_hpss_margin_error():
-    y, sr = librosa.load(os.path.join('data', 'test1_22050.wav'))
+    y, sr = librosa.load(os.path.join('tests', 'data', 'test1_22050.wav'))
     D = np.abs(librosa.stft(y))
     H, P = librosa.decompose.hpss(D, margin=0.9)
 
@@ -118,7 +115,7 @@ def test_hpss_margin_error():
 def test_complex_hpss():
 
     # Load an audio signal
-    y, sr = librosa.load(os.path.join('data', 'test1_22050.wav'))
+    y, sr = librosa.load(os.path.join('tests', 'data', 'test1_22050.wav'))
 
     D = librosa.stft(y)
 
@@ -138,9 +135,9 @@ def test_nn_filter_mean():
     X_filtered = librosa.decompose.nn_filter(X)
 
     # Normalize the recurrence matrix so dotting computes an average
-    rec = librosa.util.normalize(rec.astype(np.float), axis=1, norm=1)
+    rec = librosa.util.normalize(rec.astype(np.float), axis=0, norm=1)
 
-    assert np.allclose(X_filtered, X.dot(rec.T))
+    assert np.allclose(X_filtered, X.dot(rec))
 
 
 def test_nn_filter_mean_rec():
@@ -152,7 +149,7 @@ def test_nn_filter_mean_rec():
     rec = librosa.segment.recurrence_matrix(X)
 
     # Knock out the first three rows of links
-    rec[:3] = False
+    rec[:, :3] = False
 
     X_filtered = librosa.decompose.nn_filter(X, rec=rec)
 
@@ -160,8 +157,8 @@ def test_nn_filter_mean_rec():
         assert np.allclose(X_filtered[:, i], X[:, i])
 
     # Normalize the recurrence matrix
-    rec = librosa.util.normalize(rec.astype(np.float), axis=1, norm=1)
-    assert np.allclose(X_filtered[:, 3:], (X.dot(rec.T))[:, 3:])
+    rec = librosa.util.normalize(rec.astype(np.float), axis=0, norm=1)
+    assert np.allclose(X_filtered[:, 3:], (X.dot(rec))[:, 3:])
 
 
 def test_nn_filter_mean_rec_sparse():
@@ -175,8 +172,8 @@ def test_nn_filter_mean_rec_sparse():
     X_filtered = librosa.decompose.nn_filter(X, rec=rec)
 
     # Normalize the recurrence matrix
-    rec = librosa.util.normalize(rec.toarray().astype(np.float), axis=1, norm=1)
-    assert np.allclose(X_filtered, (X.dot(rec.T)))
+    rec = librosa.util.normalize(rec.toarray().astype(np.float), axis=0, norm=1)
+    assert np.allclose(X_filtered, (X.dot(rec)))
 
 
 def test_nn_filter_avg():
@@ -190,14 +187,14 @@ def test_nn_filter_avg():
     X_filtered = librosa.decompose.nn_filter(X, rec=rec, aggregate=np.average)
 
     # Normalize the recurrence matrix so dotting computes an average
-    rec = librosa.util.normalize(rec, axis=1, norm=1)
+    rec = librosa.util.normalize(rec, axis=0, norm=1)
 
-    assert np.allclose(X_filtered, X.dot(rec.T))
+    assert np.allclose(X_filtered, X.dot(rec))
 
 
 def test_nn_filter_badselfsim():
 
-    @raises(librosa.ParameterError)
+    @pytest.mark.xfail(raises=librosa.ParameterError)
     def __test(x, y, sparse):
         srand()
 
